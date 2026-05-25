@@ -8,7 +8,7 @@ dependencies = [
   "bs4>=0.0.2",
   "duckdb>=1.5.3",
   "recipe-scrapers>=15.11.0",
-  "requests>=2.34.2",
+  "requests[socks]>=2.34.2",
   "rich>=15.0.0",
   "structlog>=24.0.0",
 ]

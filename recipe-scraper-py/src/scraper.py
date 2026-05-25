@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import random
 import time
 from typing import Any
@@ -39,6 +40,11 @@ def _random_user_agent() -> str:
 
 def _build_session() -> requests.Session:
     session = requests.Session()
+
+    proxy_url = os.getenv("PROXY_URL", "")
+    if proxy_url:
+        session.proxies = {"http": proxy_url, "https": proxy_url}
+        log.info("proxy configured", proxy=proxy_url)
 
     retry = Retry(
         total=MAX_RETRIES,

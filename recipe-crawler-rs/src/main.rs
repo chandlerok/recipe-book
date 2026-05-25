@@ -21,8 +21,16 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    let http_client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(60))
+    let mut client_builder = reqwest::Client::builder().timeout(Duration::from_secs(60));
+
+    if let Ok(proxy_url) = std::env::var("PROXY_URL") {
+        let proxy = reqwest::Proxy::all(&proxy_url)
+            .with_context(|| format!("invalid PROXY_URL: {proxy_url}"))?;
+        client_builder = client_builder.proxy(proxy);
+        info!(%proxy_url, "proxy configured");
+    }
+
+    let http_client = client_builder
         .build()
         .context("failed to build HTTP client")?;
 

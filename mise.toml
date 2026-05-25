@@ -1,0 +1,73 @@
+[tools]
+bun = "latest"
+docker-slim = "latest"
+protoc = "latest"
+rust = "latest"
+uv = "latest"
+
+[tasks.pre-commit]
+depends = ["format", "lint", "typecheck", "proto-gen", "test"]
+
+[tasks.proto-gen]
+depends = ["proto-gen-py", "proto-gen-rs"]
+
+[tasks.format]
+depends = ["format-rs", "format-py"]
+
+[tasks.lint]
+depends = ["lint-py", "lint-rs"]
+
+[tasks.typecheck]
+depends = ["typecheck-py", "typecheck-rs"]
+
+[tasks.test]
+depends = ["test-py", "test-rs"]
+
+[tasks.proto-gen-py]
+dir = "recipe-scraper-py"
+run = "uv run -m grpc_tools.protoc --proto_path=src/proto --python_out=src/proto --pyi_out=src/proto --grpc_python_out=src/proto recipe.proto"
+
+[tasks.format-py]
+dir = "recipe-scraper-py"
+run = "uv run ruff format"
+
+[tasks.lint-py]
+dir = "recipe-scraper-py"
+run = "uv run ruff check --fix --unsafe-fixes"
+depends = ["format-py"]
+
+[tasks.typecheck-py]
+dir = "recipe-scraper-py"
+run = "uv run ty check"
+wait_for = ["format-py", "lint-py"]
+
+[tasks.test-py]
+dir = "recipe-scraper-py"
+run = "uv run pytest"
+wait_for = ["format-py", "lint-py", "proto-gen-py"]
+
+[tasks.proto-gen-rs]
+dir = "recipe-crawler-rs"
+run = "cargo build"
+
+[tasks.format-rs]
+dir = "recipe-crawler-rs"
+run = "cargo fmt"
+
+[tasks.lint-rs]
+dir = "recipe-crawler-rs"
+run = "cargo check"
+wait_for = ["format-rs"]
+
+[tasks.typecheck-rs]
+dir = "recipe-crawler-rs"
+run = "cargo clippy"
+wait_for = ["format-rs"]
+
+[tasks.test-rs]
+dir = "recipe-crawler-rs"
+run = "cargo test"
+wait_for = ["lint-rs", "typecheck-rs"]
+
+[tasks.tor]
+run = "docker run -d --rm --name tor-socks -p 9050:9050 dperson/torproxy"
