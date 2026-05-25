@@ -6,11 +6,10 @@ import time
 from typing import Any
 from urllib.parse import urlparse
 
-import requests
 import structlog
+from curl_cffi import requests as curl_requests
+from curl_cffi.requests.exceptions import ConnectionError, HTTPError, Timeout
 from recipe_scrapers import scrape_html
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 log = structlog.get_logger()
 
@@ -38,23 +37,16 @@ def _random_user_agent() -> str:
     return random.choice(USER_AGENTS)
 
 
-def _build_session() -> requests.Session:
-    session = requests.Session()
+IMPERSONATE = "chrome110"
+
+
+def _build_session() -> curl_requests.Session:
+    session = curl_requests.Session(timeout=HTTP_TIMEOUT)
 
     proxy_url = os.getenv("PROXY_URL", "")
     if proxy_url:
         session.proxies = {"http": proxy_url, "https": proxy_url}
         log.info("proxy configured", proxy=proxy_url)
-
-    retry = Retry(
-        total=MAX_RETRIES,
-        backoff_factor=BACKOFF_FACTOR,
-        status_forcelist=list(RETRYABLE_STATUSES),
-        allowed_methods=None,
-    )
-    adapter = HTTPAdapter(max_retries=retry)
-    session.mount("https://", adapter)
-    session.mount("http://", adapter)
 
     return session
 
@@ -72,27 +64,29 @@ def _build_headers(url: str) -> dict[str, str]:
     }
 
 
-_session: requests.Session | None = None
+_session: curl_requests.Session | None = None
 
 
-def _get_session() -> requests.Session:
+def _get_session() -> curl_requests.Session:
     global _session
     if _session is None:
         _session = _build_session()
     return _session
 
 
-def _fetch(url: str) -> requests.Response:
+def _fetch(url: str) -> curl_requests.Response:
     session = _get_session()
     headers = _build_headers(url)
 
-    last_exception: requests.RequestException | None = None
+    last_exception: BaseException | None = None
     for attempt in range(1 + MAX_RETRIES):
         try:
-            response = session.get(url, headers=headers, timeout=HTTP_TIMEOUT)
+            response = session.get(
+                url, headers=headers, timeout=HTTP_TIMEOUT, impersonate=IMPERSONATE
+            )
             response.raise_for_status()
             return response
-        except requests.HTTPError as e:
+        except HTTPError as e:
             status = e.response.status_code if e.response is not None else None
             if status == 429:
                 retry_after = (
@@ -115,7 +109,7 @@ def _fetch(url: str) -> requests.Response:
             ):
                 raise ScrapeError(f"HTTP {status}") from e
             last_exception = e
-        except (requests.ConnectionError, requests.Timeout) as e:
+        except (ConnectionError, Timeout) as e:
             last_exception = e
 
         if attempt < MAX_RETRIES:

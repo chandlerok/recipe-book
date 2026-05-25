@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
   "bs4>=0.0.2",
+  "curl-cffi>=0.9",
   "duckdb>=1.5.3",
   "recipe-scrapers>=15.11.0",
   "requests[socks]>=2.34.2",

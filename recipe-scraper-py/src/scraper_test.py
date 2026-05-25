@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-import requests
+from curl_cffi.requests.exceptions import HTTPError, ConnectionError, Timeout
 
 from src.scraper import RETRYABLE_STATUSES, ScrapeError, _fetch, scrape_recipe
 
@@ -17,8 +17,8 @@ class TestFetch:
     def test_http_4xx_raises_scrape_error(self) -> None:
         err_response = MagicMock()
         err_response.status_code = 404
-        err_response.raise_for_status.side_effect = requests.HTTPError(
-            response=err_response
+        err_response.raise_for_status.side_effect = HTTPError(
+            "404", response=err_response
         )
 
         with (
@@ -35,8 +35,8 @@ class TestFetch:
     def test_http_5xx_retries_then_raises(self) -> None:
         err_response = MagicMock()
         err_response.status_code = 500
-        err_response.raise_for_status.side_effect = requests.HTTPError(
-            response=err_response
+        err_response.raise_for_status.side_effect = HTTPError(
+            "404", response=err_response
         )
 
         with (
@@ -57,8 +57,8 @@ class TestFetch:
         err_response = MagicMock()
         err_response.status_code = 429
         err_response.headers = {"Retry-After": "2"}
-        err_response.raise_for_status.side_effect = requests.HTTPError(
-            response=err_response
+        err_response.raise_for_status.side_effect = HTTPError(
+            "404", response=err_response
         )
 
         with (
@@ -82,7 +82,7 @@ class TestFetch:
             patch("src.scraper.time.sleep") as mock_sleep,
         ):
             mock_session = MagicMock()
-            mock_session.get.side_effect = requests.ConnectionError("no network")
+            mock_session.get.side_effect = ConnectionError("no network")
             mock_session_fn.return_value = mock_session
 
             with pytest.raises(ScrapeError, match="HTTP error after"):
@@ -101,7 +101,7 @@ class TestFetch:
             patch("src.scraper.time.sleep") as mock_sleep,
         ):
             mock_session = MagicMock()
-            mock_session.get.side_effect = requests.Timeout("timed out")
+            mock_session.get.side_effect = Timeout("timed out")
             mock_session_fn.return_value = mock_session
 
             with pytest.raises(ScrapeError, match="HTTP error after"):
@@ -127,8 +127,8 @@ class TestFetch:
     def test_success_after_retries(self) -> None:
         err_response = MagicMock()
         err_response.status_code = 503
-        err_response.raise_for_status.side_effect = requests.HTTPError(
-            response=err_response
+        err_response.raise_for_status.side_effect = HTTPError(
+            "404", response=err_response
         )
 
         ok_response = MagicMock()
