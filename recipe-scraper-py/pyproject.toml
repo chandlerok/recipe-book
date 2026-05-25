@@ -1,0 +1,39 @@
+[project]
+name = "recipe-scraper-py"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "bs4>=0.0.2",
+  "duckdb>=1.5.3",
+  "recipe-scrapers>=15.11.0",
+  "requests>=2.34.2",
+  "rich>=15.0.0",
+  "structlog>=24.0.0",
+]
+
+[dependency-groups]
+dev = [
+  "grpcio>=1.80.0",
+  "grpcio-tools>=1.80.0",
+  "pytest>=9.0.3",
+  "ruff>=0.15.14",
+  "ty>=0.0.39",
+]
+
+[tool.ruff]
+exclude = ["src/proto/**/*"]
+
+[tool.ruff.lint]
+select = ["ANN"]
+ignore = ["ANN003"]
+
+[tool.ty.src]
+exclude = ["src/proto/**/*"]
+
+# [[tool.ty.overrides]]
+# include = ["src/**/*_test.py"]
+
+# [tool.ty.overrides.rules]
+# invalid-argument-type = "ignore"
