@@ -46,6 +46,7 @@ pub struct SiteConfig {
     pub base_url: &'static str,
     pub seed_paths: &'static [&'static str],
     pub recipe_url_test: fn(&str) -> bool,
+    pub recipe_href_substring: &'static str,
 }
 
 pub static ALLRECIPES: SiteConfig = SiteConfig {
@@ -75,6 +76,7 @@ pub static ALLRECIPES: SiteConfig = SiteConfig {
             && !url.contains("/video/")
             && !url.contains('#')
     },
+    recipe_href_substring: "/recipe/",
 };
 
 pub static BONAPPETIT: SiteConfig = SiteConfig {
@@ -95,14 +97,254 @@ pub static BONAPPETIT: SiteConfig = SiteConfig {
     recipe_url_test: |url| {
         url.contains("bonappetit.com/recipe/") && !url.contains("#") && !url.contains("/gallery/")
     },
+    recipe_href_substring: "/recipe/",
 };
+
+pub static EPICURIOUS: SiteConfig = SiteConfig {
+    name: "epicurious",
+    base_url: "https://www.epicurious.com",
+    seed_paths: &[
+        "/recipes/",
+        "/recipes/food/views/",
+        "/recipes/course/",
+        "/ingredients/",
+        "/cuisine/",
+        "/occasions/",
+    ],
+    recipe_url_test: |url| {
+        url.contains("epicurious.com/recipes/") && !url.contains("/gallery/") && !url.contains('#')
+    },
+    recipe_href_substring: "/recipe",
+};
+
+pub static FOOD52: SiteConfig = SiteConfig {
+    name: "food52",
+    base_url: "https://food52.com",
+    seed_paths: &[
+        "/recipes/",
+        "/recipes/dinner/",
+        "/recipes/dessert/",
+        "/recipes/breakfast/",
+        "/recipes/appetizer/",
+        "/recipes/salad/",
+        "/recipes/soup/",
+    ],
+    recipe_url_test: |url| url.contains("food52.com/recipes/") && !url.contains('#'),
+    recipe_href_substring: "/recipe",
+};
+
+pub static SIMPLY_RECIPES: SiteConfig = SiteConfig {
+    name: "simplyrecipes",
+    base_url: "https://www.simplyrecipes.com",
+    seed_paths: &[
+        "/recipes/",
+        "/recipes/course/",
+        "/recipes/ingredient/",
+        "/recipes/cuisine/",
+        "/recipes/season/",
+    ],
+    recipe_url_test: |url| {
+        url.contains("simplyrecipes.com/") && !url.contains("/how-to/") && !url.contains('#')
+    },
+    recipe_href_substring: "/recipe",
+};
+
+pub static PIONEER_WOMAN: SiteConfig = SiteConfig {
+    name: "pioneerwoman",
+    base_url: "https://www.thepioneerwoman.com",
+    seed_paths: &[
+        "/food-cooking/recipes/",
+        "/food-cooking/meals-menus/",
+        "/food-cooking/",
+    ],
+    recipe_url_test: |url| {
+        url.contains("thepioneerwoman.com/food-cooking/recipes/") && !url.contains('#')
+    },
+    recipe_href_substring: "/recipe",
+};
+
+pub static TASTE_OF_HOME: SiteConfig = SiteConfig {
+    name: "tasteofhome",
+    base_url: "https://www.tasteofhome.com",
+    seed_paths: &[
+        "/recipes/",
+        "/recipes/meal-types/",
+        "/recipes/cuisine/",
+        "/recipes/ingredients/",
+    ],
+    recipe_url_test: |url| url.contains("tasteofhome.com/recipes/") && !url.contains('#'),
+    recipe_href_substring: "/recipe",
+};
+
+pub static SERIOUS_EATS: SiteConfig = SiteConfig {
+    name: "seriouseats",
+    base_url: "https://www.seriouseats.com",
+    seed_paths: &["/recipes/", "/techniques/", "/ingredients/"],
+    recipe_url_test: |url| {
+        url.contains("seriouseats.com/")
+            && !url.contains("/techniques/")
+            && !url.contains("/equipment/")
+    },
+    recipe_href_substring: "/recipe",
+};
+
+pub static COOKIE_AND_KATE: SiteConfig = SiteConfig {
+    name: "cookieandkate",
+    base_url: "https://cookieandkate.com",
+    seed_paths: &["/", "/category/"],
+    recipe_url_test: |url| {
+        url.starts_with("https://cookieandkate.com/")
+            && !url.starts_with("https://cookieandkate.com/category/")
+            && !url.starts_with("https://cookieandkate.com/about")
+            && !url.starts_with("https://cookieandkate.com/cookbook")
+            && !url.starts_with("https://cookieandkate.com/favorite")
+            && !url.starts_with("https://cookieandkate.com/shop")
+            && !url.starts_with("https://cookieandkate.com/contact")
+            && !url.contains('#')
+            && !url.contains("/tag/")
+    },
+    recipe_href_substring: "/",
+};
+
+pub static PINCH_OF_YUM: SiteConfig = SiteConfig {
+    name: "pinchofyum",
+    base_url: "https://pinchofyum.com",
+    seed_paths: &["/", "/recipe-index/", "/category/"],
+    recipe_url_test: |url| {
+        url.starts_with("https://pinchofyum.com/")
+            && !url.starts_with("https://pinchofyum.com/category/")
+            && !url.starts_with("https://pinchofyum.com/about")
+            && !url.starts_with("https://pinchofyum.com/recipe-index")
+            && !url.starts_with("https://pinchofyum.com/shop")
+            && !url.starts_with("https://pinchofyum.com/resources")
+            && !url.starts_with("https://pinchofyum.com/pinch")
+            && !url.starts_with("https://pinchofyum.com/contact")
+            && !url.contains('#')
+            && !url.contains("/tag/")
+    },
+    recipe_href_substring: "/",
+};
+
+pub static HALF_BAKED_HARVEST: SiteConfig = SiteConfig {
+    name: "halfbakedharvest",
+    base_url: "https://www.halfbakedharvest.com",
+    seed_paths: &["/", "/recipe-index/", "/category/"],
+    recipe_url_test: |url| {
+        url.starts_with("https://www.halfbakedharvest.com/")
+            && !url.starts_with("https://www.halfbakedharvest.com/category/")
+            && !url.starts_with("https://www.halfbakedharvest.com/about")
+            && !url.starts_with("https://www.halfbakedharvest.com/cookbook")
+            && !url.starts_with("https://www.halfbakedharvest.com/shop")
+            && !url.starts_with("https://www.halfbakedharvest.com/contact")
+            && !url.starts_with("https://www.halfbakedharvest.com/recipe-index")
+            && !url.starts_with("https://www.halfbakedharvest.com/privacy")
+            && !url.contains('#')
+            && !url.contains("/tag/")
+    },
+    recipe_href_substring: "/",
+};
+
+pub static LOVE_AND_LEMONS: SiteConfig = SiteConfig {
+    name: "loveandlemons",
+    base_url: "https://www.loveandlemons.com",
+    seed_paths: &["/", "/recipes/", "/category/"],
+    recipe_url_test: |url| {
+        url.starts_with("https://www.loveandlemons.com/")
+            && !url.starts_with("https://www.loveandlemons.com/category/")
+            && !url.starts_with("https://www.loveandlemons.com/about")
+            && !url.starts_with("https://www.loveandlemons.com/cookbook")
+            && !url.starts_with("https://www.loveandlemons.com/shop")
+            && !url.starts_with("https://www.loveandlemons.com/contact")
+            && !url.starts_with("https://www.loveandlemons.com/recipes")
+            && !url.contains('#')
+            && !url.contains("/tag/")
+    },
+    recipe_href_substring: "/",
+};
+
+pub static RECIPE_TIN_EATS: SiteConfig = SiteConfig {
+    name: "recipetineats",
+    base_url: "https://www.recipetineats.com",
+    seed_paths: &["/", "/recipes/", "/category/"],
+    recipe_url_test: |url| {
+        url.starts_with("https://www.recipetineats.com/")
+            && !url.starts_with("https://www.recipetineats.com/category/")
+            && !url.starts_with("https://www.recipetineats.com/about")
+            && !url.starts_with("https://www.recipetineats.com/cookbook")
+            && !url.starts_with("https://www.recipetineats.com/shop")
+            && !url.starts_with("https://www.recipetineats.com/contact")
+            && !url.starts_with("https://www.recipetineats.com/recipes")
+            && !url.starts_with("https://www.recipetineats.com/recipe-index")
+            && !url.contains('#')
+            && !url.contains("/tag/")
+    },
+    recipe_href_substring: "/",
+};
+
+pub static MINIMALIST_BAKER: SiteConfig = SiteConfig {
+    name: "minimalistbaker",
+    base_url: "https://minimalistbaker.com",
+    seed_paths: &["/", "/recipes/", "/category/"],
+    recipe_url_test: |url| {
+        url.starts_with("https://minimalistbaker.com/")
+            && !url.starts_with("https://minimalistbaker.com/category/")
+            && !url.starts_with("https://minimalistbaker.com/about")
+            && !url.starts_with("https://minimalistbaker.com/cookbook")
+            && !url.starts_with("https://minimalistbaker.com/shop")
+            && !url.starts_with("https://minimalistbaker.com/contact")
+            && !url.starts_with("https://minimalistbaker.com/recipes")
+            && !url.starts_with("https://minimalistbaker.com/recipe-index")
+            && !url.contains('#')
+            && !url.contains("/tag/")
+    },
+    recipe_href_substring: "/",
+};
+
+pub static BUDGET_BYTES: SiteConfig = SiteConfig {
+    name: "budgetbytes",
+    base_url: "https://www.budgetbytes.com",
+    seed_paths: &["/", "/recipes/", "/category/"],
+    recipe_url_test: |url| {
+        url.starts_with("https://www.budgetbytes.com/")
+            && !url.starts_with("https://www.budgetbytes.com/category/")
+            && !url.starts_with("https://www.budgetbytes.com/about")
+            && !url.starts_with("https://www.budgetbytes.com/shop")
+            && !url.starts_with("https://www.budgetbytes.com/contact")
+            && !url.starts_with("https://www.budgetbytes.com/how-to")
+            && !url.starts_with("https://www.budgetbytes.com/extra-bytes")
+            && !url.starts_with("https://www.budgetbytes.com/recipes")
+            && !url.starts_with("https://www.budgetbytes.com/meal-plans")
+            && !url.contains('#')
+            && !url.contains("/tag/")
+    },
+    recipe_href_substring: "/",
+};
+
+pub static ALL_SITES: &[&SiteConfig] = &[
+    &ALLRECIPES,
+    &BONAPPETIT,
+    &EPICURIOUS,
+    &FOOD52,
+    &SIMPLY_RECIPES,
+    &PIONEER_WOMAN,
+    &TASTE_OF_HOME,
+    &SERIOUS_EATS,
+    &COOKIE_AND_KATE,
+    &PINCH_OF_YUM,
+    &HALF_BAKED_HARVEST,
+    &LOVE_AND_LEMONS,
+    &RECIPE_TIN_EATS,
+    &MINIMALIST_BAKER,
+    &BUDGET_BYTES,
+];
 
 pub async fn crawl(
     site: &SiteConfig,
     client: &reqwest::Client,
     tx: mpsc::Sender<String>,
 ) -> Result<()> {
-    let recipe_link_sel = Selector::parse("a[href*=\"/recipe/\"]").unwrap();
+    let recipe_link_sel =
+        Selector::parse(&format!("a[href*=\"{}\"]", site.recipe_href_substring)).unwrap();
     let next_page_sel =
         Selector::parse("a[rel=\"next\"], a.pagination__next, a[href*=\"?page=\"]").unwrap();
 

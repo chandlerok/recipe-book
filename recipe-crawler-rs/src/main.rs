@@ -41,23 +41,19 @@ async fn main() -> Result<()> {
         .context("failed to connect to gRPC server")?;
     let mut grpc = RecipeServiceClient::new(channel);
 
-    let (tx, mut rx) = mpsc::channel::<String>(512);
+    let (tx, mut rx) = mpsc::channel::<String>(1024);
 
-    let client_a = http_client.clone();
-    let tx_a = tx.clone();
-    let allrecipes_handle = tokio::spawn(async move {
-        if let Err(e) = crawler::crawl(&crawler::ALLRECIPES, &client_a, tx_a).await {
-            warn!(error = %e, "allrecipes crawl error");
-        }
-    });
-
-    let client_b = http_client.clone();
-    let tx_b = tx.clone();
-    let bonappetit_handle = tokio::spawn(async move {
-        if let Err(e) = crawler::crawl(&crawler::BONAPPETIT, &client_b, tx_b).await {
-            warn!(error = %e, "bonappetit crawl error");
-        }
-    });
+    let mut handles = Vec::new();
+    for site in crawler::ALL_SITES {
+        let client = http_client.clone();
+        let tx = tx.clone();
+        let name = site.name;
+        handles.push(tokio::spawn(async move {
+            if let Err(e) = crawler::crawl(site, &client, tx).await {
+                warn!(site = name, error = %e, "crawl error");
+            }
+        }));
+    }
 
     drop(tx);
 
@@ -92,6 +88,8 @@ async fn main() -> Result<()> {
 
     info!(submitted, skipped, "channel closed, crawl complete");
 
-    let _ = tokio::join!(allrecipes_handle, bonappetit_handle);
+    for handle in handles {
+        let _ = handle.await;
+    }
     Ok(())
 }
