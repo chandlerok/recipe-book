@@ -117,7 +117,9 @@ def _scrape_worker(db: RecipeDB, stop_event: threading.Event) -> None:
             recipe = scraper.scrape_recipe(url)
             db.save_recipe(recipe)
             db.mark_done(job_id)
-            worker_log.info("job done", job_id=job_id, url=url, title=recipe.get("title", ""))
+            worker_log.info(
+                "job done", job_id=job_id, url=url, title=recipe.get("title", "")
+            )
         except scraper.ScrapeError as e:
             db.mark_error(job_id, str(e))
             worker_log.warning("job failed", job_id=job_id, url=url, error=str(e))
