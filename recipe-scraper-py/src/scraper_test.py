@@ -223,6 +223,7 @@ class TestScrapeRecipe:
         mock_scraper = MagicMock()
         mock_scraper.title.return_value = "Quick Dish"
         mock_scraper.total_time.return_value = None
+        mock_scraper.schema.total_time.side_effect = Exception
         mock_scraper.ingredients.return_value = []
         mock_scraper.instructions.return_value = "do stuff"
         mock_scraper.image.return_value = None

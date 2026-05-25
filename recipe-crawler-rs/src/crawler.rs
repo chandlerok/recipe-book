@@ -217,7 +217,7 @@ async fn fetch_page(client: &reqwest::Client, url: &str, site_base_url: &str) ->
                 "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             )
             .header(ACCEPT_LANGUAGE, "en-US,en;q=0.9")
-            .header(ACCEPT_ENCODING, "gzip, deflate, br")
+            .header(ACCEPT_ENCODING, "gzip, deflate")
             .header(CACHE_CONTROL, "no-cache")
             .header(DNT, "1")
             .header(CONNECTION, "keep-alive")

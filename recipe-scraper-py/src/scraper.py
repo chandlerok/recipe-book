@@ -65,7 +65,7 @@ def _build_headers(url: str) -> dict[str, str]:
         "User-Agent": _random_user_agent(),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Encoding": "gzip, deflate",
         "Referer": f"https://{domain}/",
         "DNT": "1",
         "Connection": "keep-alive",
@@ -143,10 +143,17 @@ def scrape_recipe(url: str) -> dict[str, Any]:
         raise ScrapeError(f"Parser init error: {e}") from e
 
     try:
+        total_time = scraper.total_time() or 0
+        if total_time == 0:
+            try:
+                total_time = scraper.schema.total_time() or 0
+            except Exception:
+                pass
+
         recipe: dict[str, Any] = {
             "url": url,
             "title": scraper.title(),
-            "total_time": scraper.total_time() or 0,
+            "total_time": total_time,
             "ingredients": scraper.ingredients(),
             "instructions": scraper.instructions().split("\n"),
             "image": scraper.image() or "",
