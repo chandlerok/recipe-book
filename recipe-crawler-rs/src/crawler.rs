@@ -1,6 +1,8 @@
 use std::{collections::HashSet, sync::atomic::AtomicUsize, time::Duration};
 
 use anyhow::{Context, Result};
+use quick_xml::Reader;
+use quick_xml::events::Event;
 use reqwest::header::{
     ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, CONNECTION, DNT, REFERER, USER_AGENT,
 };
@@ -47,29 +49,13 @@ pub struct SiteConfig {
     pub seed_paths: &'static [&'static str],
     pub recipe_url_test: fn(&str) -> bool,
     pub recipe_link_selector: &'static str,
+    pub use_sitemap: bool,
 }
 
 pub static ALLRECIPES: SiteConfig = SiteConfig {
     name: "allrecipes",
     base_url: "https://www.allrecipes.com",
-    seed_paths: &[
-        "/recipes/",
-        "/recipes/meat-and-poultry/",
-        "/recipes/seafood/",
-        "/recipes/pasta-and-noodles/",
-        "/recipes/salad/",
-        "/recipes/soups-stews-and-chili/",
-        "/recipes/appetizers-and-snacks/",
-        "/recipes/bread/",
-        "/recipes/desserts/",
-        "/recipes/breakfast-and-brunch/",
-        "/recipes/drinks/",
-        "/recipes/side-dish/",
-        "/recipes/bbq-and-grilling/",
-        "/recipes/holidays-and-events/",
-        "/recipes/healthy-recipes/",
-        "/recipes/quick-and-easy/",
-    ],
+    seed_paths: &["/sitemap.xml"],
     recipe_url_test: |url| {
         url.contains("allrecipes.com/recipe/")
             && !url.contains("/photo/")
@@ -77,96 +63,73 @@ pub static ALLRECIPES: SiteConfig = SiteConfig {
             && !url.contains('#')
     },
     recipe_link_selector: "a[href*=\"/recipe/\"]",
+    use_sitemap: true,
 };
 
 pub static BONAPPETIT: SiteConfig = SiteConfig {
     name: "bonappetit",
     base_url: "https://www.bonappetit.com",
-    seed_paths: &[
-        "/recipe/perfect-poached-eggs",
-        "/recipe/cacio-e-pepe",
-        "/recipe/classic-pasta-carbonara",
-        "/recipe/best-ever-grilled-cheese",
-        "/recipe/tofu-and-mushroom-stir-fry",
-        "/recipe/best-deviled-eggs",
-    ],
+    seed_paths: &["/sitemap.xml"],
     recipe_url_test: |url| {
         url.contains("bonappetit.com/recipe/") && !url.contains("#") && !url.contains("/gallery/")
     },
     recipe_link_selector: "a[href*=\"/recipe/\"]",
+    use_sitemap: true,
 };
 
 pub static FOOD52: SiteConfig = SiteConfig {
     name: "food52",
     base_url: "https://food52.com",
-    seed_paths: &[
-        "/recipes/",
-        "/recipes/dinner/",
-        "/recipes/dessert/",
-        "/recipes/breakfast/",
-        "/recipes/appetizer/",
-        "/recipes/salad/",
-        "/recipes/soup/",
-    ],
+    seed_paths: &["/sitemap.xml"],
     recipe_url_test: |url| url.contains("food52.com/recipes/") && !url.contains('#'),
     recipe_link_selector: "a[href*=\"/recipe\"]",
+    use_sitemap: true,
 };
 
 pub static SIMPLY_RECIPES: SiteConfig = SiteConfig {
     name: "simplyrecipes",
     base_url: "https://www.simplyrecipes.com",
-    seed_paths: &[
-        "/recipes/",
-        "/recipes/course/",
-        "/recipes/ingredient/",
-        "/recipes/cuisine/",
-        "/recipes/season/",
-    ],
+    seed_paths: &["/sitemap.xml"],
     recipe_url_test: |url| {
         url.contains("simplyrecipes.com/") && !url.contains("/how-to/") && !url.contains('#')
     },
     recipe_link_selector: "a[href*=\"/recipe\"]",
+    use_sitemap: true,
 };
 
 pub static PIONEER_WOMAN: SiteConfig = SiteConfig {
     name: "pioneerwoman",
     base_url: "https://www.thepioneerwoman.com",
-    seed_paths: &[
-        "/food-cooking/recipes/",
-        "/food-cooking/meals-menus/",
-        "/food-cooking/",
-    ],
+    seed_paths: &["/sitemap.xml"],
     recipe_url_test: |url| {
         url.contains("thepioneerwoman.com/food-cooking/recipes/") && !url.contains('#')
     },
     recipe_link_selector: "a[href*=\"/recipe\"]",
+    use_sitemap: true,
 };
 
 pub static TASTE_OF_HOME: SiteConfig = SiteConfig {
     name: "tasteofhome",
     base_url: "https://www.tasteofhome.com",
-    seed_paths: &[
-        "/recipes/",
-        "/recipes/meal-types/",
-        "/recipes/cuisine/",
-        "/recipes/ingredients/",
-    ],
+    seed_paths: &["/sitemap.xml"],
     recipe_url_test: |url| url.contains("tasteofhome.com/recipes/") && !url.contains('#'),
     recipe_link_selector: "a[href*=\"/recipe\"]",
+    use_sitemap: true,
 };
 
 pub static SERIOUS_EATS: SiteConfig = SiteConfig {
     name: "seriouseats",
     base_url: "https://www.seriouseats.com",
-    seed_paths: &["/recipes/", "/techniques/"],
+    seed_paths: &["/sitemap.xml"],
     recipe_url_test: |url| url.contains("seriouseats.com/"),
     recipe_link_selector: "a[href*=\"/recipe\"]",
+    use_sitemap: true,
 };
 
 pub static COOKIE_AND_KATE: SiteConfig = SiteConfig {
     name: "cookieandkate",
     base_url: "https://cookieandkate.com",
-    seed_paths: &["/", "/recipe-index/"],
+    seed_paths: &["/sitemap.xml"],
     recipe_url_test: |url| {
         url.starts_with("https://cookieandkate.com/")
             && url != "https://cookieandkate.com/"
@@ -181,12 +144,13 @@ pub static COOKIE_AND_KATE: SiteConfig = SiteConfig {
             && !url.contains('#')
     },
     recipe_link_selector: "article a[href], .post a[href], .archive a[href], h2 a[href], h3 a[href]",
+    use_sitemap: true,
 };
 
 pub static PINCH_OF_YUM: SiteConfig = SiteConfig {
     name: "pinchofyum",
     base_url: "https://pinchofyum.com",
-    seed_paths: &["/", "/recipe-index/"],
+    seed_paths: &["/sitemap.xml"],
     recipe_url_test: |url| {
         url.starts_with("https://pinchofyum.com/")
             && url != "https://pinchofyum.com/"
@@ -200,12 +164,13 @@ pub static PINCH_OF_YUM: SiteConfig = SiteConfig {
             && !url.contains('#')
     },
     recipe_link_selector: "article a[href], .post a[href], .archive a[href], h2 a[href], h3 a[href]",
+    use_sitemap: true,
 };
 
 pub static HALF_BAKED_HARVEST: SiteConfig = SiteConfig {
     name: "halfbakedharvest",
     base_url: "https://www.halfbakedharvest.com",
-    seed_paths: &["/", "/recipe-index/"],
+    seed_paths: &["/sitemap.xml"],
     recipe_url_test: |url| {
         url.starts_with("https://www.halfbakedharvest.com/")
             && url != "https://www.halfbakedharvest.com/"
@@ -219,12 +184,13 @@ pub static HALF_BAKED_HARVEST: SiteConfig = SiteConfig {
             && !url.contains('#')
     },
     recipe_link_selector: "article a[href], .post a[href], .archive a[href], h2 a[href], h3 a[href]",
+    use_sitemap: true,
 };
 
 pub static LOVE_AND_LEMONS: SiteConfig = SiteConfig {
     name: "loveandlemons",
     base_url: "https://www.loveandlemons.com",
-    seed_paths: &["/", "/recipes/"],
+    seed_paths: &["/sitemap.xml"],
     recipe_url_test: |url| {
         url.starts_with("https://www.loveandlemons.com/")
             && url != "https://www.loveandlemons.com/"
@@ -237,12 +203,13 @@ pub static LOVE_AND_LEMONS: SiteConfig = SiteConfig {
             && !url.contains('#')
     },
     recipe_link_selector: "article a[href], .post a[href], .archive a[href], h2 a[href], h3 a[href]",
+    use_sitemap: true,
 };
 
 pub static RECIPE_TIN_EATS: SiteConfig = SiteConfig {
     name: "recipetineats",
     base_url: "https://www.recipetineats.com",
-    seed_paths: &["/", "/recipes/"],
+    seed_paths: &["/sitemap.xml"],
     recipe_url_test: |url| {
         url.starts_with("https://www.recipetineats.com/")
             && url != "https://www.recipetineats.com/"
@@ -256,12 +223,13 @@ pub static RECIPE_TIN_EATS: SiteConfig = SiteConfig {
             && !url.contains('#')
     },
     recipe_link_selector: "article a[href], .post a[href], .archive a[href], h2 a[href], h3 a[href]",
+    use_sitemap: true,
 };
 
 pub static MINIMALIST_BAKER: SiteConfig = SiteConfig {
     name: "minimalistbaker",
     base_url: "https://minimalistbaker.com",
-    seed_paths: &["/", "/recipes/"],
+    seed_paths: &["/sitemap.xml"],
     recipe_url_test: |url| {
         url.starts_with("https://minimalistbaker.com/")
             && url != "https://minimalistbaker.com/"
@@ -275,12 +243,13 @@ pub static MINIMALIST_BAKER: SiteConfig = SiteConfig {
             && !url.contains('#')
     },
     recipe_link_selector: "article a[href], .post a[href], .archive a[href], h2 a[href], h3 a[href]",
+    use_sitemap: true,
 };
 
 pub static BUDGET_BYTES: SiteConfig = SiteConfig {
     name: "budgetbytes",
     base_url: "https://www.budgetbytes.com",
-    seed_paths: &["/", "/recipes/"],
+    seed_paths: &["/sitemap.xml"],
     recipe_url_test: |url| {
         url.starts_with("https://www.budgetbytes.com/")
             && url != "https://www.budgetbytes.com/"
@@ -295,6 +264,7 @@ pub static BUDGET_BYTES: SiteConfig = SiteConfig {
             && !url.contains('#')
     },
     recipe_link_selector: "article a[href], .post a[href], .archive a[href], h2 a[href], h3 a[href]",
+    use_sitemap: true,
 };
 
 pub static ALL_SITES: &[&SiteConfig] = &[
@@ -319,6 +289,131 @@ pub async fn crawl(
     client: &reqwest::Client,
     tx: mpsc::Sender<String>,
 ) -> Result<()> {
+    if site.use_sitemap {
+        return crawl_sitemap(site, client, tx).await;
+    }
+    crawl_pages(site, client, tx).await
+}
+
+async fn crawl_sitemap(
+    site: &SiteConfig,
+    client: &reqwest::Client,
+    tx: mpsc::Sender<String>,
+) -> Result<()> {
+    info!(site = site.name, "starting sitemap crawl");
+
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut sitemap_queue: Vec<String> = site
+        .seed_paths
+        .iter()
+        .map(|p| format!("{}{}", site.base_url, p))
+        .collect();
+
+    while let Some(sitemap_url) = sitemap_queue.pop() {
+        info!(site = site.name, url = %sitemap_url, "fetching sitemap");
+
+        let body = fetch_page(client, &sitemap_url, site.base_url).await?;
+
+        let (sitemap_urls, recipe_urls) = {
+            let recipe_test = site.recipe_url_test;
+            tokio::task::spawn_blocking(move || parse_sitemap(&body, &recipe_test))
+                .await
+                .context("spawn_blocking failed")??
+        };
+
+        info!(
+            site = site.name,
+            sitemap = %sitemap_url,
+            sub_sitemaps = sitemap_urls.len(),
+            recipes = recipe_urls.len(),
+            "sitemap parsed"
+        );
+
+        for next in sitemap_urls {
+            if seen.insert(next.clone()) {
+                sitemap_queue.push(next);
+            }
+        }
+
+        for url in recipe_urls {
+            if tx.send(url).await.is_err() {
+                return Ok(());
+            }
+        }
+
+        sleep(REQUEST_DELAY).await;
+    }
+
+    info!(
+        site = site.name,
+        total = seen.len(),
+        "sitemap crawl complete"
+    );
+    Ok(())
+}
+
+fn parse_sitemap(
+    body: &str,
+    recipe_test: &(dyn Fn(&str) -> bool + Send + Sync),
+) -> Result<(Vec<String>, Vec<String>)> {
+    let mut reader = Reader::from_str(body);
+    reader.config_mut().trim_text(true);
+
+    let mut sitemap_urls = Vec::new();
+    let mut recipe_urls = Vec::new();
+    let mut in_sitemap = false;
+    let mut in_url = false;
+    let mut in_loc = false;
+    let mut current_loc = String::new();
+
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(ref e)) => match e.name().as_ref() {
+                b"sitemap" => in_sitemap = true,
+                b"url" => in_url = true,
+                b"loc" => in_loc = true,
+                _ => {}
+            },
+            Ok(Event::End(ref e)) => match e.name().as_ref() {
+                b"sitemap" => in_sitemap = false,
+                b"url" => {
+                    in_url = false;
+                    if !current_loc.is_empty() {
+                        if recipe_test(&current_loc) {
+                            recipe_urls.push(current_loc.clone());
+                        }
+                        current_loc.clear();
+                    }
+                }
+                _ => {}
+            },
+            Ok(Event::Text(ref e)) => {
+                if in_loc {
+                    let text = e.unescape()?;
+                    current_loc = text.to_string();
+                    if in_sitemap && !in_url {
+                        sitemap_urls.push(current_loc.clone());
+                        current_loc.clear();
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => {
+                warn!("xml parse error: {e}");
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    Ok((sitemap_urls, recipe_urls))
+}
+
+async fn crawl_pages(
+    site: &SiteConfig,
+    client: &reqwest::Client,
+    tx: mpsc::Sender<String>,
+) -> Result<()> {
     let recipe_link_sel = Selector::parse(site.recipe_link_selector).unwrap();
     let next_page_sel =
         Selector::parse("a[rel=\"next\"], a.pagination__next, a[href*=\"?page=\"]").unwrap();
@@ -335,7 +430,7 @@ pub async fn crawl(
     info!(
         site = site.name,
         seeds = site.seed_paths.len(),
-        "starting crawl",
+        "starting page crawl",
     );
 
     while let Some(page_url) = page_queue.pop() {
@@ -415,7 +510,7 @@ pub async fn crawl(
     info!(
         site = site.name,
         total = seen_recipes.len(),
-        "crawl complete"
+        "page crawl complete"
     );
     Ok(())
 }
