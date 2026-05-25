@@ -352,6 +352,14 @@ async fn crawl_sitemap(
     Ok(())
 }
 
+fn local_name(name: &[u8]) -> &[u8] {
+    if let Some(pos) = name.iter().position(|&b| b == b'}') {
+        &name[pos + 1..]
+    } else {
+        name
+    }
+}
+
 fn parse_sitemap(
     body: &str,
     recipe_test: &(dyn Fn(&str) -> bool + Send + Sync),
@@ -362,22 +370,24 @@ fn parse_sitemap(
     let mut sitemap_urls = Vec::new();
     let mut recipe_urls = Vec::new();
     let mut in_sitemap = false;
-    let mut in_url = false;
     let mut in_loc = false;
     let mut current_loc = String::new();
 
     loop {
         match reader.read_event() {
-            Ok(Event::Start(ref e)) => match e.name().as_ref() {
+            Ok(Event::Start(ref e)) => match local_name(e.name().as_ref()) {
                 b"sitemap" => in_sitemap = true,
-                b"url" => in_url = true,
                 b"loc" => in_loc = true,
                 _ => {}
             },
-            Ok(Event::End(ref e)) => match e.name().as_ref() {
-                b"sitemap" => in_sitemap = false,
+            Ok(Event::End(ref e)) => match local_name(e.name().as_ref()) {
+                b"sitemap" => {
+                    in_sitemap = false;
+                    if !current_loc.is_empty() {
+                        current_loc.clear();
+                    }
+                }
                 b"url" => {
-                    in_url = false;
                     if !current_loc.is_empty() {
                         if recipe_test(&current_loc) {
                             recipe_urls.push(current_loc.clone());
@@ -385,15 +395,16 @@ fn parse_sitemap(
                         current_loc.clear();
                     }
                 }
+                b"loc" => in_loc = false,
                 _ => {}
             },
             Ok(Event::Text(ref e)) => {
                 if in_loc {
                     let text = e.unescape()?;
-                    current_loc = text.to_string();
-                    if in_sitemap && !in_url {
-                        sitemap_urls.push(current_loc.clone());
-                        current_loc.clear();
+                    if in_sitemap {
+                        sitemap_urls.push(text.to_string());
+                    } else {
+                        current_loc = text.to_string();
                     }
                 }
             }
