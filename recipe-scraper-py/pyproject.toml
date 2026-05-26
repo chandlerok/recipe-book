@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
   "bs4>=0.0.2",
   "curl-cffi>=0.9",
-  "duckdb>=1.5.3",
+  "psycopg[binary,pool]>=3.3.4",
   "recipe-scrapers>=15.11.0",
   "requests[socks]>=2.34.2",
   "rich>=15.0.0",

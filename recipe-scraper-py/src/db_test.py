@@ -1,25 +1,36 @@
-import json
-import os
-import tempfile
 from collections.abc import Generator
 
+import psycopg
 import pytest
 
 from src.db import RecipeDB
 
+TEST_DSN = "postgresql:///recipe_book_test"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def test_db() -> Generator[None, None, None]:
+    admin = psycopg.connect("postgresql:///postgres")
+    admin.autocommit = True
+    admin.execute("DROP DATABASE IF EXISTS recipe_book_test WITH (FORCE)")
+    admin.execute("CREATE DATABASE recipe_book_test")
+    admin.close()
+    yield
+    admin = psycopg.connect("postgresql:///postgres")
+    admin.autocommit = True
+    admin.execute("DROP DATABASE IF EXISTS recipe_book_test WITH (FORCE)")
+    admin.close()
+
 
 @pytest.fixture
 def db() -> Generator[RecipeDB, None, None]:
-    fd, path = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-    os.unlink(path)
-    database = RecipeDB(path)
+    database = RecipeDB(TEST_DSN)
+    with database._pool.connection() as conn:
+        conn.execute("DELETE FROM scrape_queue")
+        conn.execute("DELETE FROM recipes")
+        conn.commit()
     yield database
     database.close()
-    try:
-        os.unlink(path)
-    except OSError:
-        pass
 
 
 def sample_recipe(url: str = "https://example.com/test", **overrides) -> dict:
@@ -57,9 +68,10 @@ class TestQueue:
         assert job is not None
         job_id, _ = job
 
-        result = db._conn.execute(
-            "SELECT status FROM scrape_queue WHERE id = ?", [job_id]
-        ).fetchone()
+        with db._pool.connection() as conn:
+            result = conn.execute(
+                "SELECT status FROM scrape_queue WHERE id = %s", [job_id]
+            ).fetchone()
         assert result is not None
         assert result[0] == "in_progress"
 
@@ -72,9 +84,10 @@ class TestQueue:
         assert job is not None
         db.mark_done(job[0])
 
-        result = db._conn.execute(
-            "SELECT status FROM scrape_queue WHERE id = ?", [job[0]]
-        ).fetchone()
+        with db._pool.connection() as conn:
+            result = conn.execute(
+                "SELECT status FROM scrape_queue WHERE id = %s", [job[0]]
+            ).fetchone()
         assert result is not None
         assert result[0] == "done"
 
@@ -84,10 +97,11 @@ class TestQueue:
         assert job is not None
         db.mark_error(job[0], "something broke")
 
-        row = db._conn.execute(
-            "SELECT status, error_message FROM scrape_queue WHERE id = ?",
-            [job[0]],
-        ).fetchone()
+        with db._pool.connection() as conn:
+            row = conn.execute(
+                "SELECT status, error_message FROM scrape_queue WHERE id = %s",
+                [job[0]],
+            ).fetchone()
         assert row is not None
         assert row[0] == "error"
         assert row[1] == "something broke"
@@ -98,9 +112,10 @@ class TestQueue:
         assert job is not None
         db.mark_error(job[0], "x" * 1000)
 
-        row = db._conn.execute(
-            "SELECT error_message FROM scrape_queue WHERE id = ?", [job[0]]
-        ).fetchone()
+        with db._pool.connection() as conn:
+            row = conn.execute(
+                "SELECT error_message FROM scrape_queue WHERE id = %s", [job[0]]
+            ).fetchone()
         assert row is not None
         assert len(row[0]) == 500
 

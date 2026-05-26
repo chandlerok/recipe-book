@@ -1,119 +1,147 @@
 import json
-from pathlib import Path
+from collections.abc import Iterator
 
-import duckdb
+import psycopg
 import structlog
-
+from psycopg_pool import ConnectionPool
 
 log = structlog.get_logger()
 
 
 class RecipeDB:
-    def __init__(self, db_path: str = "recipes.db") -> None:
-        self.db_path = str(Path(db_path).resolve())
-        log.info("opening database", path=self.db_path)
-        self._conn = duckdb.connect(self.db_path)
+    def __init__(self, dsn: str) -> None:
+        self._dsn = dsn
+        log.info("connecting to postgres", dsn=dsn)
+        self._pool = ConnectionPool(dsn, min_size=1, max_size=10, open=True)
         self._init_db()
 
     def _init_db(self) -> None:
-        self._conn.execute("INSTALL fts;")
-        self._conn.execute("LOAD fts;")
-
-        self._conn.execute("""
-            CREATE SEQUENCE IF NOT EXISTS scrape_queue_id_seq;
-        """)
-        self._conn.execute("""
-            CREATE TABLE IF NOT EXISTS scrape_queue (
-                id INTEGER PRIMARY KEY DEFAULT nextval('scrape_queue_id_seq'),
-                url VARCHAR UNIQUE NOT NULL,
-                status VARCHAR NOT NULL DEFAULT 'pending',
-                error_message VARCHAR,
-                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                scraped_at TIMESTAMP,
-            )
-        """)
-
-        self._conn.execute("""
-            CREATE TABLE IF NOT EXISTS recipes (
-                url VARCHAR PRIMARY KEY,
-                title VARCHAR,
-                total_time INTEGER,
-                ingredients VARCHAR,
-                instructions VARCHAR,
-                image VARCHAR,
-                scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            )
-        """)
-
-        try:
-            self._conn.execute(
-                "PRAGMA create_fts_index('recipes', 'url', 'title', 'ingredients', 'instructions')"
-            )
-        except Exception:
-            pass
+        with self._pool.connection() as conn, conn.transaction():
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS scrape_queue (
+                    id SERIAL PRIMARY KEY,
+                    url VARCHAR NOT NULL UNIQUE,
+                    status VARCHAR NOT NULL DEFAULT 'pending',
+                    error_message VARCHAR,
+                    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    scraped_at TIMESTAMP
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS recipes (
+                    url VARCHAR PRIMARY KEY,
+                    title TEXT,
+                    total_time INTEGER,
+                    ingredients TEXT,
+                    instructions TEXT,
+                    image TEXT,
+                    scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.execute("""
+                ALTER TABLE recipes ADD COLUMN IF NOT EXISTS search_vector tsvector
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_recipes_search
+                ON recipes USING GIN(search_vector)
+            """)
+            conn.execute("""
+                CREATE OR REPLACE FUNCTION recipes_search_update() RETURNS trigger AS $$
+                BEGIN
+                    NEW.search_vector :=
+                        setweight(to_tsvector('english', COALESCE(NEW.title, '')), 'A') ||
+                        setweight(to_tsvector('english', COALESCE(NEW.ingredients, '')), 'B') ||
+                        setweight(to_tsvector('english', COALESCE(NEW.instructions, '')), 'C');
+                    RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql
+            """)
+            conn.execute("DROP TRIGGER IF EXISTS trg_recipes_search ON recipes")
+            conn.execute("""
+                CREATE TRIGGER trg_recipes_search
+                    BEFORE INSERT OR UPDATE ON recipes
+                    FOR EACH ROW EXECUTE FUNCTION recipes_search_update()
+            """)
+            conn.execute("""
+                UPDATE recipes SET search_vector =
+                    setweight(to_tsvector('english', COALESCE(title, '')), 'A') ||
+                    setweight(to_tsvector('english', COALESCE(ingredients, '')), 'B') ||
+                    setweight(to_tsvector('english', COALESCE(instructions, '')), 'C')
+                WHERE search_vector IS NULL
+            """)
 
     def enqueue_url(self, url: str) -> str:
-        existing = self._conn.execute(
-            "SELECT status FROM scrape_queue WHERE url = ?", [url]
-        ).fetchone()
-        if existing:
-            return existing[0]
+        with self._pool.connection() as conn, conn.transaction():
+            existing = conn.execute(
+                "SELECT status FROM scrape_queue WHERE url = %s", [url]
+            ).fetchone()
+            if existing:
+                return existing[0]
 
-        self._conn.execute("INSERT INTO scrape_queue (url) VALUES (?)", [url])
-        return "pending"
+            conn.execute("INSERT INTO scrape_queue (url) VALUES (%s)", [url])
+            return "pending"
 
     def next_pending(self) -> tuple[int, str] | None:
-        row = self._conn.execute("""
-            SELECT id, url FROM scrape_queue
-            WHERE status = 'pending'
-            ORDER BY added_at ASC
-            LIMIT 1
-        """).fetchone()
-        if row is None:
-            return None
-        job_id, url = row[0], row[1]
-        self._conn.execute(
-            "UPDATE scrape_queue SET status = 'in_progress' WHERE id = ?",
-            [job_id],
-        )
-        return (job_id, url)
+        with self._pool.connection() as conn, conn.transaction():
+            row = conn.execute("""
+                UPDATE scrape_queue SET status = 'in_progress'
+                WHERE id = (
+                    SELECT id FROM scrape_queue
+                    WHERE status = 'pending'
+                    ORDER BY added_at ASC
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                )
+                RETURNING id, url
+            """).fetchone()
+            if row is None:
+                return None
+            return (row[0], row[1])
 
     def mark_done(self, job_id: int) -> None:
-        self._conn.execute(
-            "UPDATE scrape_queue SET status = 'done', scraped_at = CURRENT_TIMESTAMP WHERE id = ?",
-            [job_id],
-        )
+        with self._pool.connection() as conn, conn.transaction():
+            conn.execute(
+                "UPDATE scrape_queue SET status = 'done', scraped_at = CURRENT_TIMESTAMP WHERE id = %s",
+                [job_id],
+            )
 
     def mark_error(self, job_id: int, error: str) -> None:
-        self._conn.execute(
-            "UPDATE scrape_queue SET status = 'error', error_message = ? WHERE id = ?",
-            [error[:500], job_id],
-        )
+        with self._pool.connection() as conn, conn.transaction():
+            conn.execute(
+                "UPDATE scrape_queue SET status = 'error', error_message = %s WHERE id = %s",
+                [error[:500], job_id],
+            )
 
     def save_recipe(self, recipe: dict) -> None:
-        self._conn.execute(
-            """
-            INSERT OR REPLACE INTO recipes (url, title, total_time, ingredients, instructions, image)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """,
-            [
-                recipe["url"],
-                recipe.get("title", ""),
-                recipe.get("total_time", 0),
-                json.dumps(recipe.get("ingredients", [])),
-                json.dumps(recipe.get("instructions", [])),
-                recipe.get("image", ""),
-            ],
-        )
-        self._conn.execute(
-            "PRAGMA create_fts_index('recipes', 'url', 'title', 'ingredients', 'instructions', overwrite=1)",
-        )
+        with self._pool.connection() as conn, conn.transaction():
+            conn.execute(
+                """
+                INSERT INTO recipes (url, title, total_time, ingredients, instructions, image)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (url) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    total_time = EXCLUDED.total_time,
+                    ingredients = EXCLUDED.ingredients,
+                    instructions = EXCLUDED.instructions,
+                    image = EXCLUDED.image,
+                    scraped_at = CURRENT_TIMESTAMP
+            """,
+                [
+                    recipe["url"],
+                    recipe.get("title", ""),
+                    recipe.get("total_time", 0),
+                    json.dumps(recipe.get("ingredients", [])),
+                    json.dumps(recipe.get("instructions", [])),
+                    recipe.get("image", ""),
+                ],
+            )
 
     def get_recipe(self, url: str) -> dict | None:
-        row = self._conn.execute(
-            "SELECT url, title, total_time, ingredients, instructions, image FROM recipes WHERE url = ?",
-            [url],
-        ).fetchone()
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                "SELECT url, title, total_time, ingredients, instructions, image FROM recipes WHERE url = %s",
+                [url],
+            ).fetchone()
         if row is None:
             return None
         return {
@@ -126,20 +154,18 @@ class RecipeDB:
         }
 
     def search(self, query: str, limit: int = 20) -> list[dict]:
-        rows = self._conn.execute(
-            """
-            SELECT r.url, r.title, r.total_time, r.ingredients, r.instructions, r.image, sq.score
-            FROM (
-                SELECT *, fts_main_recipes.match_bm25(url, ?) AS score
+        with self._pool.connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT url, title, total_time, ingredients, instructions, image,
+                       ts_rank(search_vector, plainto_tsquery('english', %s)) AS score
                 FROM recipes
-            ) sq
-            JOIN recipes r ON r.url = sq.url
-            WHERE sq.score IS NOT NULL
-            ORDER BY sq.score DESC
-            LIMIT ?
-        """,
-            [query, limit],
-        ).fetchall()
+                WHERE search_vector @@ plainto_tsquery('english', %s)
+                ORDER BY score DESC
+                LIMIT %s
+            """,
+                [query, query, limit],
+            ).fetchall()
 
         return [
             {
@@ -157,9 +183,10 @@ class RecipeDB:
         ]
 
     def queue_stats(self) -> dict:
-        rows = self._conn.execute("""
-            SELECT status, COUNT(*) FROM scrape_queue GROUP BY status
-        """).fetchall()
+        with self._pool.connection() as conn:
+            rows = conn.execute(
+                "SELECT status, COUNT(*) FROM scrape_queue GROUP BY status"
+            ).fetchall()
         stats = {"pending": 0, "in_progress": 0, "done": 0, "error": 0}
         for status, count in rows:
             if status in stats:
@@ -167,5 +194,5 @@ class RecipeDB:
         return stats
 
     def close(self) -> None:
-        self._conn.close()
-        log.info("closed database", path=self.db_path)
+        self._pool.close()
+        log.info("closed connection pool", dsn=self._dsn)

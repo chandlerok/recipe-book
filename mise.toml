@@ -1,9 +1,12 @@
 [tools]
 bun = "latest"
-docker-slim = "latest"
+podman = "latest"
 protoc = "latest"
 rust = "latest"
 uv = "latest"
+
+[settings]
+python.uv_venv_auto = "source"
 
 [tasks.pre-commit]
 depends = ["format", "lint", "typecheck", "proto-gen", "test"]
@@ -70,4 +73,4 @@ run = "cargo test"
 wait_for = ["lint-rs", "typecheck-rs"]
 
 [tasks.tor]
-run = "docker run -d --rm --name tor-socks -p 9050:9050 dperson/torproxy"
+run = "podman run -d --rm --name tor-socks -p 9050:9050 dperson/torproxy"

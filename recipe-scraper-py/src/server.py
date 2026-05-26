@@ -130,7 +130,9 @@ def _scrape_worker(db: RecipeDB, stop_event: threading.Event) -> None:
     worker_log.info("worker stopped")
 
 
-def serve(host: str = "[::]", port: int = 50051, db_path: str = "recipes.db") -> None:
+def serve(
+    host: str = "[::]", port: int = 50051, dsn: str = "postgresql:///recipe_book"
+) -> None:
     structlog.configure(
         processors=[
             structlog.stdlib.add_log_level,
@@ -138,7 +140,7 @@ def serve(host: str = "[::]", port: int = 50051, db_path: str = "recipes.db") ->
         ],
     )
 
-    db = RecipeDB(db_path)
+    db = RecipeDB(dsn)
     stop_event = threading.Event()
 
     worker = threading.Thread(target=_scrape_worker, args=(db, stop_event), daemon=True)
