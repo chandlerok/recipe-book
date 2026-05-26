@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1"
 prost = "0.14.3"
+rand = "0.8"
 quick-xml = "0.37"
 reqwest = { version = "0.12", features = ["gzip", "rustls-tls", "socks"], default-features = false }
 scraper = "0.23"

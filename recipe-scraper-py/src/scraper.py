@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import random
+import threading
 import time
 from typing import Any
 from urllib.parse import urlparse
@@ -64,14 +65,15 @@ def _build_headers(url: str) -> dict[str, str]:
     }
 
 
-_session: curl_requests.Session | None = None
+_thread_local = threading.local()
 
 
 def _get_session() -> curl_requests.Session:
-    global _session
-    if _session is None:
-        _session = _build_session()
-    return _session
+    session = getattr(_thread_local, "session", None)
+    if session is None:
+        session = _build_session()
+        _thread_local.session = session
+    return session
 
 
 def _fetch(url: str) -> curl_requests.Response:

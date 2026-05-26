@@ -1,8 +1,16 @@
-use std::{collections::HashSet, sync::atomic::AtomicUsize, time::Duration};
+use std::{
+    collections::HashSet,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::{Duration, Instant},
+};
 
 use anyhow::{Context, Result};
 use quick_xml::Reader;
 use quick_xml::events::Event;
+use rand::Rng;
 use reqwest::header::{
     ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, CONNECTION, DNT, REFERER, USER_AGENT,
 };
@@ -16,6 +24,10 @@ const MAX_RETRIES: u32 = 2;
 const BASE_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+fn jitter_delay(base: Duration) -> Duration {
+    let extra_ms: u64 = rand::thread_rng().gen_range(0..=1000);
+    base + Duration::from_millis(extra_ms)
+}
 
 static USER_AGENTS: &[&str] = &[
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -384,55 +396,100 @@ async fn crawl_sitemap(
     client: &reqwest::Client,
     tx: mpsc::Sender<String>,
 ) -> Result<()> {
-    info!(site = site.name, "starting sitemap crawl");
+    let site_name = site.name;
+    info!(site = site_name, "starting sitemap crawl");
 
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut sitemap_queue: Vec<String> = site
-        .seed_paths
-        .iter()
-        .map(|p| format!("{}{}", site.base_url, p))
-        .collect();
+    let queue: Arc<tokio::sync::Mutex<Vec<String>>> = Arc::new(tokio::sync::Mutex::new(
+        site.seed_paths
+            .iter()
+            .map(|p| format!("{}{}", site.base_url, p))
+            .collect(),
+    ));
+    let seen: Arc<tokio::sync::Mutex<HashSet<String>>> =
+        Arc::new(tokio::sync::Mutex::new(HashSet::new()));
+    let in_flight = Arc::new(AtomicUsize::new(0));
+    let last_req: Arc<tokio::sync::Mutex<Instant>> =
+        Arc::new(tokio::sync::Mutex::new(Instant::now() - REQUEST_DELAY));
 
-    while let Some(sitemap_url) = sitemap_queue.pop() {
-        info!(site = site.name, url = %sitemap_url, "fetching sitemap");
-
-        let body = fetch_page(client, &sitemap_url, site.base_url).await?;
-
-        let (sitemap_urls, recipe_urls) = {
-            let recipe_test = site.recipe_url_test;
-            tokio::task::spawn_blocking(move || parse_sitemap(&body, &recipe_test))
-                .await
-                .context("spawn_blocking failed")??
+    loop {
+        let url = {
+            let mut q = queue.lock().await;
+            q.pop()
         };
 
-        info!(
-            site = site.name,
-            sitemap = %sitemap_url,
-            sub_sitemaps = sitemap_urls.len(),
-            recipes = recipe_urls.len(),
-            "sitemap parsed"
-        );
-
-        for next in sitemap_urls {
-            if seen.insert(next.clone()) {
-                sitemap_queue.push(next);
+        let url = match url {
+            Some(u) => u,
+            None => {
+                if in_flight.load(Ordering::Acquire) == 0 {
+                    break;
+                }
+                sleep(Duration::from_millis(100)).await;
+                continue;
             }
-        }
+        };
 
-        for url in recipe_urls {
-            if tx.send(url).await.is_err() {
-                return Ok(());
+        in_flight.fetch_add(1, Ordering::Release);
+
+        let client = client.clone();
+        let base_url = site.base_url;
+        let recipe_test = site.recipe_url_test;
+        let tx = tx.clone();
+        let queue = queue.clone();
+        let seen = seen.clone();
+        let in_flight = in_flight.clone();
+        let last_req = last_req.clone();
+
+        tokio::spawn(async move {
+            {
+                let mut last = last_req.lock().await;
+                let elapsed = last.elapsed();
+                if elapsed < REQUEST_DELAY {
+                    sleep(jitter_delay(REQUEST_DELAY - elapsed)).await;
+                }
+                *last = Instant::now();
             }
-        }
 
-        sleep(REQUEST_DELAY).await;
+            match fetch_page(&client, &url, base_url).await {
+                Ok(body) => {
+                    if let Ok(Ok((new_sitemaps, recipes))) =
+                        tokio::task::spawn_blocking(move || parse_sitemap(&body, &recipe_test))
+                            .await
+                    {
+                        info!(
+                            site = site_name,
+                            url = %url,
+                            sub_sitemaps = new_sitemaps.len(),
+                            recipes = recipes.len(),
+                            "sitemap parsed"
+                        );
+
+                        {
+                            let mut s = seen.lock().await;
+                            let mut q = queue.lock().await;
+                            for next in new_sitemaps {
+                                if s.insert(next.clone()) {
+                                    q.push(next);
+                                }
+                            }
+                        }
+
+                        for recipe_url in recipes {
+                            if tx.send(recipe_url).await.is_err() {
+                                break;
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(site = site_name, url = %url, error = %e, "sitemap fetch failed");
+                }
+            }
+
+            in_flight.fetch_sub(1, Ordering::Release);
+        });
     }
 
-    info!(
-        site = site.name,
-        total = seen.len(),
-        "sitemap crawl complete"
-    );
+    info!(site = site_name, "sitemap crawl complete");
     Ok(())
 }
 

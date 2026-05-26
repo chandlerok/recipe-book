@@ -6,13 +6,6 @@ from curl_cffi.requests.exceptions import HTTPError, ConnectionError, Timeout
 from src.scraper import RETRYABLE_STATUSES, ScrapeError, _fetch, scrape_recipe
 
 
-@pytest.fixture(autouse=True)
-def _reset_session() -> None:
-    import src.scraper as mod
-
-    mod._session = None
-
-
 class TestFetch:
     def test_http_4xx_raises_scrape_error(self) -> None:
         err_response = MagicMock()

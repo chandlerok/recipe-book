@@ -4,6 +4,7 @@ mod recipe;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use rand::Rng;
 use tokio::sync::mpsc;
 use tonic::transport::Channel;
 use tracing::{info, warn};
@@ -12,6 +13,7 @@ use recipe::{AddScrapeJobRequest, recipe_service_client::RecipeServiceClient};
 
 const GRPC_ADDR: &str = "http://[::1]:50051";
 const GRPC_SUBMIT_DELAY: Duration = Duration::from_millis(500);
+const STARTUP_JITTER_MAX: Duration = Duration::from_secs(10);
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -48,7 +50,10 @@ async fn main() -> Result<()> {
         let client = http_client.clone();
         let tx = tx.clone();
         let name = site.name;
+
+        let jitter_ms: u64 = rand::thread_rng().gen_range(0..STARTUP_JITTER_MAX.as_millis() as u64);
         handles.push(tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(jitter_ms)).await;
             if let Err(e) = crawler::crawl(site, &client, tx).await {
                 warn!(site = name, error = %e, "crawl error");
             }

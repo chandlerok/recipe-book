@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 import time
 from concurrent import futures
+from urllib.parse import urlparse
 
 import grpc
 import structlog
@@ -13,6 +14,23 @@ from src.proto import recipe_pb2, recipe_pb2_grpc
 
 log = structlog.get_logger()
 SCRAPE_DELAY = 2.0
+NUM_WORKERS = 3
+
+
+class DomainRateLimiter:
+    def __init__(self, min_delay: float = SCRAPE_DELAY) -> None:
+        self._min_delay = min_delay
+        self._last_request: dict[str, float] = {}
+        self._lock = threading.Lock()
+
+    def wait_if_needed(self, url: str) -> None:
+        domain = urlparse(url).netloc
+        with self._lock:
+            last = self._last_request.get(domain, 0.0)
+            elapsed = time.monotonic() - last
+            if elapsed < self._min_delay:
+                time.sleep(self._min_delay - elapsed)
+            self._last_request[domain] = time.monotonic()
 
 
 class RecipeServicer(recipe_pb2_grpc.RecipeServiceServicer):
@@ -99,8 +117,13 @@ def _recipe_to_proto(recipe: dict) -> recipe_pb2.GetRecipeResponse:
     )
 
 
-def _scrape_worker(db: RecipeDB, stop_event: threading.Event) -> None:
-    worker_log = structlog.get_logger("worker")
+def _scrape_worker(
+    db: RecipeDB,
+    stop_event: threading.Event,
+    rate_limiter: DomainRateLimiter,
+    worker_id: int,
+) -> None:
+    worker_log = structlog.get_logger("worker", worker_id=worker_id)
     worker_log.info("worker started")
 
     while not stop_event.is_set():
@@ -112,6 +135,8 @@ def _scrape_worker(db: RecipeDB, stop_event: threading.Event) -> None:
             continue
 
         job_id, url = job
+        rate_limiter.wait_if_needed(url)
+
         worker_log.info("scraping job", job_id=job_id, url=url)
         try:
             recipe = scraper.scrape_recipe(url)
@@ -142,9 +167,18 @@ def serve(
 
     db = RecipeDB(dsn)
     stop_event = threading.Event()
+    rate_limiter = DomainRateLimiter()
 
-    worker = threading.Thread(target=_scrape_worker, args=(db, stop_event), daemon=True)
-    worker.start()
+    workers = [
+        threading.Thread(
+            target=_scrape_worker,
+            args=(db, stop_event, rate_limiter, i + 1),
+            daemon=True,
+        )
+        for i in range(NUM_WORKERS)
+    ]
+    for w in workers:
+        w.start()
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     recipe_pb2_grpc.add_RecipeServiceServicer_to_server(RecipeServicer(db), server)
@@ -160,4 +194,6 @@ def serve(
     finally:
         stop_event.set()
         server.stop(grace=5)
+        for w in workers:
+            w.join()
         db.close()
