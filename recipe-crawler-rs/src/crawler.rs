@@ -691,3 +691,355 @@ fn resolve_url(base: &str, href: &str, base_url: &str) -> String {
     }
     format!("{}{}", base_url, href.trim_start_matches('/'))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_retryable_true() {
+        for code in [
+            reqwest::StatusCode::TOO_MANY_REQUESTS,
+            reqwest::StatusCode::INTERNAL_SERVER_ERROR,
+            reqwest::StatusCode::BAD_GATEWAY,
+            reqwest::StatusCode::SERVICE_UNAVAILABLE,
+            reqwest::StatusCode::GATEWAY_TIMEOUT,
+        ] {
+            assert!(is_retryable(code), "expected {code} to be retryable");
+        }
+    }
+
+    #[test]
+    fn test_is_retryable_false() {
+        for code in [
+            reqwest::StatusCode::OK,
+            reqwest::StatusCode::NOT_FOUND,
+            reqwest::StatusCode::FORBIDDEN,
+            reqwest::StatusCode::UNAUTHORIZED,
+            reqwest::StatusCode::MOVED_PERMANENTLY,
+        ] {
+            assert!(!is_retryable(code), "expected {code} to NOT be retryable");
+        }
+    }
+
+    #[test]
+    fn test_local_name_strips_namespace() {
+        assert_eq!(local_name(b"{http://sitemaps.org}url"), b"url");
+        assert_eq!(local_name(b"{http://sitemaps.org}sitemap"), b"sitemap");
+        assert_eq!(local_name(b"{ns}loc"), b"loc");
+    }
+
+    #[test]
+    fn test_local_name_no_namespace() {
+        assert_eq!(local_name(b"url"), b"url");
+        assert_eq!(local_name(b"loc"), b"loc");
+        assert_eq!(local_name(b"tag"), b"tag");
+    }
+
+    #[test]
+    fn test_local_name_empty_namespace() {
+        assert_eq!(local_name(b"{}tag"), b"tag");
+    }
+
+    #[test]
+    fn test_local_name_empty_input() {
+        assert!(local_name(b"").is_empty());
+    }
+
+    #[test]
+    fn test_resolve_url_absolute() {
+        assert_eq!(
+            resolve_url("https://example.com/page", "https://other.com/recipe", "https://example.com"),
+            "https://other.com/recipe"
+        );
+    }
+
+    #[test]
+    fn test_resolve_url_relative() {
+        assert_eq!(
+            resolve_url("https://example.com/page/", "recipe/123", "https://example.com"),
+            "https://example.com/page/recipe/123"
+        );
+    }
+
+    #[test]
+    fn test_resolve_url_root_relative() {
+        assert_eq!(
+            resolve_url("https://example.com/page", "/recipe/123", "https://example.com"),
+            "https://example.com/recipe/123"
+        );
+    }
+
+    #[test]
+    fn test_resolve_url_fallback() {
+        let result = resolve_url("not-a-url", "/recipe/123", "https://example.com");
+        assert_eq!(result, "https://example.comrecipe/123");
+    }
+
+    #[test]
+    fn test_resolve_url_fallback_missing_slash() {
+        let result = resolve_url("not-a-url", "recipe/123", "https://example.com");
+        assert_eq!(result, "https://example.comrecipe/123");
+    }
+
+    #[test]
+    fn test_resolve_url_trailing_slash() {
+        assert_eq!(
+            resolve_url("https://example.com/", "//other.com/recipe", "https://example.com"),
+            "https://other.com/recipe"
+        );
+    }
+
+    #[test]
+    fn test_parse_sitemap_empty() {
+        let (sitemaps, recipes) = parse_sitemap("", &|_| true).unwrap();
+        assert!(sitemaps.is_empty());
+        assert!(recipes.is_empty());
+    }
+
+    #[test]
+    fn test_parse_sitemap_recipe_urls() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+            <url><loc>https://example.com/recipe/pasta</loc></url>
+            <url><loc>https://example.com/recipe/pizza</loc></url>
+        </urlset>"#;
+
+        let (sitemaps, recipes) = parse_sitemap(xml, &|url| url.contains("/recipe/")).unwrap();
+        assert!(sitemaps.is_empty());
+        assert_eq!(recipes.len(), 2);
+        assert!(recipes.contains(&"https://example.com/recipe/pasta".to_string()));
+        assert!(recipes.contains(&"https://example.com/recipe/pizza".to_string()));
+    }
+
+    #[test]
+    fn test_parse_sitemap_filters_by_recipe_test() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <urlset>
+            <url><loc>https://example.com/recipe/pasta</loc></url>
+            <url><loc>https://example.com/about</loc></url>
+        </urlset>"#;
+
+        let (_, recipes) = parse_sitemap(xml, &|url| url.contains("/recipe/")).unwrap();
+        assert_eq!(recipes.len(), 1);
+        assert_eq!(recipes[0], "https://example.com/recipe/pasta");
+    }
+
+    #[test]
+    fn test_parse_sitemap_index() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <sitemapindex>
+            <sitemap><loc>https://example.com/sitemap1.xml</loc></sitemap>
+            <sitemap><loc>https://example.com/sitemap2.xml</loc></sitemap>
+        </sitemapindex>"#;
+
+        let (sitemaps, recipes) = parse_sitemap(xml, &|_| true).unwrap();
+        assert_eq!(sitemaps.len(), 2);
+        assert!(recipes.is_empty());
+    }
+
+    #[test]
+    fn test_parse_sitemap_default_namespace() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+            <url><loc>https://example.com/recipe/pasta</loc></url>
+        </urlset>"#;
+
+        let (_, recipes) = parse_sitemap(xml, &|_| true).unwrap();
+        assert_eq!(recipes.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_sitemap_mixed_index_and_urls() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <sitemapindex>
+            <sitemap><loc>https://example.com/sitemap1.xml</loc></sitemap>
+            <url><loc>https://example.com/recipe/pasta</loc></url>
+        </sitemapindex>"#;
+
+        let (sitemaps, recipes) = parse_sitemap(xml, &|_| true).unwrap();
+        assert_eq!(sitemaps.len(), 1);
+        assert_eq!(recipes.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_sitemap_malformed() {
+        let xml = "not valid xml at all <<<>>>";
+        let (sitemaps, recipes) = parse_sitemap(xml, &|_| true).unwrap();
+        assert!(sitemaps.is_empty());
+        assert!(recipes.is_empty());
+    }
+
+    #[test]
+    fn test_allrecipes_recipe_url_test() {
+        let test = ALLRECIPES.recipe_url_test;
+        assert!(test("https://www.allrecipes.com/recipe/123/"));
+        assert!(!test("https://www.allrecipes.com/photo/123/"));
+        assert!(!test("https://www.allrecipes.com/recipe/123/#comment"));
+        assert!(!test("https://www.allrecipes.com/video/123/"));
+    }
+
+    #[test]
+    fn test_bonappetit_recipe_url_test() {
+        let test = BONAPPETIT.recipe_url_test;
+        assert!(test("https://www.bonappetit.com/recipe/pasta"));
+        assert!(!test("https://www.bonappetit.com/recipe/pasta#comment"));
+        assert!(!test("https://www.bonappetit.com/gallery/photos"));
+    }
+
+    #[test]
+    fn test_food52_recipe_url_test() {
+        let test = FOOD52.recipe_url_test;
+        assert!(test("https://food52.com/recipes/123-pasta"));
+        assert!(!test("https://food52.com/recipes/123#comment"));
+        assert!(!test("https://food52.com/about"));
+    }
+
+    #[test]
+    fn test_simplyrecipes_recipe_url_test() {
+        let test = SIMPLY_RECIPES.recipe_url_test;
+        assert!(test("https://www.simplyrecipes.com/pasta-recipe"));
+        assert!(!test("https://www.simplyrecipes.com/how-to/cut-onions"));
+        assert!(!test("https://www.simplyrecipes.com/author/jane"));
+        assert!(!test("https://www.simplyrecipes.com/tag/pasta"));
+        assert!(!test("https://www.simplyrecipes.com/terms"));
+    }
+
+    #[test]
+    fn test_cookieandkate_recipe_url_test() {
+        let test = COOKIE_AND_KATE.recipe_url_test;
+        assert!(test("https://cookieandkate.com/chocolate-chip-cookies"));
+        assert!(!test("https://cookieandkate.com/"));
+        assert!(!test("https://cookieandkate.com/about"));
+        assert!(!test("https://cookieandkate.com/author/mary"));
+        assert!(!test("https://cookieandkate.com/tag/vegan"));
+        assert!(!test("https://cookieandkate.com/privacy-policy"));
+    }
+
+    #[test]
+    fn test_pinchofyum_recipe_url_test() {
+        let test = PINCH_OF_YUM.recipe_url_test;
+        assert!(test("https://pinchofyum.com/chicken-tacos"));
+        assert!(!test("https://pinchofyum.com/"));
+        assert!(!test("https://pinchofyum.com/about"));
+        assert!(!test("https://pinchofyum.com/author/mary"));
+        assert!(!test("https://pinchofyum.com/tag/vegan"));
+    }
+
+    #[test]
+    fn test_halfbakedharvest_recipe_url_test() {
+        let test = HALF_BAKED_HARVEST.recipe_url_test;
+        assert!(test("https://www.halfbakedharvest.com/one-pot-pasta"));
+        assert!(!test("https://www.halfbakedharvest.com/"));
+        assert!(!test("https://www.halfbakedharvest.com/about"));
+        assert!(!test("https://www.halfbakedharvest.com/cookbook"));
+    }
+
+    #[test]
+    fn test_budgetbytes_recipe_url_test() {
+        let test = BUDGET_BYTES.recipe_url_test;
+        assert!(test("https://www.budgetbytes.com/black-bean-tacos"));
+        assert!(!test("https://www.budgetbytes.com/"));
+        assert!(!test("https://www.budgetbytes.com/about"));
+        assert!(!test("https://www.budgetbytes.com/how-to/cook-rice"));
+        assert!(!test("https://www.budgetbytes.com/meal-plans/week1"));
+    }
+
+    #[test]
+    fn test_resolve_url_handles_empty_href() {
+        let result = resolve_url("https://example.com/page", "", "https://example.com");
+        assert_eq!(result, "https://example.com/page");
+    }
+
+    #[test]
+    fn test_resolve_url_preserves_query_params() {
+        assert_eq!(
+            resolve_url("https://example.com/page", "?page=2", "https://example.com"),
+            "https://example.com/page?page=2"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_fetch_page_retries_on_429() {
+        let mock_server = wiremock::MockServer::start().await;
+
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(429)
+                    .insert_header("Retry-After", "0"),
+            )
+            .expect(1..)
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let result = fetch_page(&client, &mock_server.uri(), &mock_server.uri()).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_fetch_page_succeeds_on_200() {
+        let mock_server = wiremock::MockServer::start().await;
+
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_string("recipe content"))
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let result = fetch_page(&client, &mock_server.uri(), &mock_server.uri()).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "recipe content");
+    }
+
+    #[tokio::test]
+    async fn test_fetch_page_bails_on_404() {
+        let mock_server = wiremock::MockServer::start().await;
+
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .respond_with(wiremock::ResponseTemplate::new(404))
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let result = fetch_page(&client, &mock_server.uri(), &mock_server.uri()).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_fetch_page_retries_on_500_then_succeeds() {
+        let mock_server = wiremock::MockServer::start().await;
+
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .respond_with(wiremock::ResponseTemplate::new(500))
+            .up_to_n_times(1)
+            .mount(&mock_server)
+            .await;
+
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_string("success"))
+            .mount(&mock_server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let result = fetch_page(&client, &mock_server.uri(), &mock_server.uri()).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "success");
+    }
+}
