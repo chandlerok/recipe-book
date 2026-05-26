@@ -91,7 +91,14 @@ pub static SIMPLY_RECIPES: SiteConfig = SiteConfig {
     base_url: "https://www.simplyrecipes.com",
     seed_paths: &["/sitemap.xml"],
     recipe_url_test: |url| {
-        url.contains("simplyrecipes.com/") && !url.contains("/how-to/") && !url.contains('#')
+        url.contains("simplyrecipes.com/")
+            && !url.contains("/how-to/")
+            && !url.contains("/author/")
+            && !url.contains("/tag/")
+            && !url.contains("/page/")
+            && !url.contains("/terms")
+            && !url.contains("/privacy")
+            && !url.contains('#')
     },
     recipe_link_selector: "a[href*=\"/recipe\"]",
     use_sitemap: true,
@@ -141,6 +148,17 @@ pub static COOKIE_AND_KATE: SiteConfig = SiteConfig {
             && !url.starts_with("https://cookieandkate.com/recipe-index")
             && !url.starts_with("https://cookieandkate.com/privacy")
             && !url.starts_with("https://cookieandkate.com/category")
+            && !url.contains("/author/")
+            && !url.contains("/tag/")
+            && !url.contains("/page/")
+            && !url.contains("/feed/")
+            && !url.contains("/wp-")
+            && !url.contains("/comment-page-")
+            && !url.contains("/terms")
+            && !url.contains("/tos")
+            && !url.contains("/meal-plan")
+            && !url.contains("/newsletter")
+            && !url.contains("/policy")
             && !url.contains('#')
     },
     recipe_link_selector: "article a[href], .post a[href], .archive a[href], h2 a[href], h3 a[href]",
@@ -161,6 +179,17 @@ pub static PINCH_OF_YUM: SiteConfig = SiteConfig {
             && !url.starts_with("https://pinchofyum.com/contact")
             && !url.starts_with("https://pinchofyum.com/recipe-index")
             && !url.starts_with("https://pinchofyum.com/category")
+            && !url.contains("/author/")
+            && !url.contains("/tag/")
+            && !url.contains("/page/")
+            && !url.contains("/feed/")
+            && !url.contains("/wp-")
+            && !url.contains("/comment-page-")
+            && !url.contains("/terms")
+            && !url.contains("/tos")
+            && !url.contains("/meal-plan")
+            && !url.contains("/newsletter")
+            && !url.contains("/policy")
             && !url.contains('#')
     },
     recipe_link_selector: "article a[href], .post a[href], .archive a[href], h2 a[href], h3 a[href]",
@@ -181,6 +210,17 @@ pub static HALF_BAKED_HARVEST: SiteConfig = SiteConfig {
             && !url.starts_with("https://www.halfbakedharvest.com/recipe-index")
             && !url.starts_with("https://www.halfbakedharvest.com/privacy")
             && !url.starts_with("https://www.halfbakedharvest.com/category")
+            && !url.contains("/author/")
+            && !url.contains("/tag/")
+            && !url.contains("/page/")
+            && !url.contains("/feed/")
+            && !url.contains("/wp-")
+            && !url.contains("/comment-page-")
+            && !url.contains("/terms")
+            && !url.contains("/tos")
+            && !url.contains("/meal-plan")
+            && !url.contains("/newsletter")
+            && !url.contains("/policy")
             && !url.contains('#')
     },
     recipe_link_selector: "article a[href], .post a[href], .archive a[href], h2 a[href], h3 a[href]",
@@ -200,6 +240,17 @@ pub static LOVE_AND_LEMONS: SiteConfig = SiteConfig {
             && !url.starts_with("https://www.loveandlemons.com/contact")
             && !url.starts_with("https://www.loveandlemons.com/recipes")
             && !url.starts_with("https://www.loveandlemons.com/category")
+            && !url.contains("/author/")
+            && !url.contains("/tag/")
+            && !url.contains("/page/")
+            && !url.contains("/feed/")
+            && !url.contains("/wp-")
+            && !url.contains("/comment-page-")
+            && !url.contains("/terms")
+            && !url.contains("/tos")
+            && !url.contains("/meal-plan")
+            && !url.contains("/newsletter")
+            && !url.contains("/policy")
             && !url.contains('#')
     },
     recipe_link_selector: "article a[href], .post a[href], .archive a[href], h2 a[href], h3 a[href]",
@@ -220,6 +271,17 @@ pub static RECIPE_TIN_EATS: SiteConfig = SiteConfig {
             && !url.starts_with("https://www.recipetineats.com/recipes")
             && !url.starts_with("https://www.recipetineats.com/recipe-index")
             && !url.starts_with("https://www.recipetineats.com/category")
+            && !url.contains("/author/")
+            && !url.contains("/tag/")
+            && !url.contains("/page/")
+            && !url.contains("/feed/")
+            && !url.contains("/wp-")
+            && !url.contains("/comment-page-")
+            && !url.contains("/terms")
+            && !url.contains("/tos")
+            && !url.contains("/meal-plan")
+            && !url.contains("/newsletter")
+            && !url.contains("/policy")
             && !url.contains('#')
     },
     recipe_link_selector: "article a[href], .post a[href], .archive a[href], h2 a[href], h3 a[href]",
@@ -240,6 +302,17 @@ pub static MINIMALIST_BAKER: SiteConfig = SiteConfig {
             && !url.starts_with("https://minimalistbaker.com/recipes")
             && !url.starts_with("https://minimalistbaker.com/recipe-index")
             && !url.starts_with("https://minimalistbaker.com/category")
+            && !url.contains("/author/")
+            && !url.contains("/tag/")
+            && !url.contains("/page/")
+            && !url.contains("/feed/")
+            && !url.contains("/wp-")
+            && !url.contains("/comment-page-")
+            && !url.contains("/terms")
+            && !url.contains("/tos")
+            && !url.contains("/meal-plan")
+            && !url.contains("/newsletter")
+            && !url.contains("/policy")
             && !url.contains('#')
     },
     recipe_link_selector: "article a[href], .post a[href], .archive a[href], h2 a[href], h3 a[href]",
@@ -261,6 +334,17 @@ pub static BUDGET_BYTES: SiteConfig = SiteConfig {
             && !url.starts_with("https://www.budgetbytes.com/recipes")
             && !url.starts_with("https://www.budgetbytes.com/meal-plans")
             && !url.starts_with("https://www.budgetbytes.com/category")
+            && !url.contains("/author/")
+            && !url.contains("/tag/")
+            && !url.contains("/page/")
+            && !url.contains("/feed/")
+            && !url.contains("/wp-")
+            && !url.contains("/comment-page-")
+            && !url.contains("/terms")
+            && !url.contains("/tos")
+            && !url.contains("/meal-plan")
+            && !url.contains("/newsletter")
+            && !url.contains("/policy")
             && !url.contains('#')
     },
     recipe_link_selector: "article a[href], .post a[href], .archive a[href], h2 a[href], h3 a[href]",
