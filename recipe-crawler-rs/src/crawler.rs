@@ -749,7 +749,11 @@ mod tests {
     #[test]
     fn test_resolve_url_absolute() {
         assert_eq!(
-            resolve_url("https://example.com/page", "https://other.com/recipe", "https://example.com"),
+            resolve_url(
+                "https://example.com/page",
+                "https://other.com/recipe",
+                "https://example.com"
+            ),
             "https://other.com/recipe"
         );
     }
@@ -757,7 +761,11 @@ mod tests {
     #[test]
     fn test_resolve_url_relative() {
         assert_eq!(
-            resolve_url("https://example.com/page/", "recipe/123", "https://example.com"),
+            resolve_url(
+                "https://example.com/page/",
+                "recipe/123",
+                "https://example.com"
+            ),
             "https://example.com/page/recipe/123"
         );
     }
@@ -765,7 +773,11 @@ mod tests {
     #[test]
     fn test_resolve_url_root_relative() {
         assert_eq!(
-            resolve_url("https://example.com/page", "/recipe/123", "https://example.com"),
+            resolve_url(
+                "https://example.com/page",
+                "/recipe/123",
+                "https://example.com"
+            ),
             "https://example.com/recipe/123"
         );
     }
@@ -785,7 +797,11 @@ mod tests {
     #[test]
     fn test_resolve_url_trailing_slash() {
         assert_eq!(
-            resolve_url("https://example.com/", "//other.com/recipe", "https://example.com"),
+            resolve_url(
+                "https://example.com/",
+                "//other.com/recipe",
+                "https://example.com"
+            ),
             "https://other.com/recipe"
         );
     }
@@ -964,10 +980,7 @@ mod tests {
         let mock_server = wiremock::MockServer::start().await;
 
         wiremock::Mock::given(wiremock::matchers::method("GET"))
-            .respond_with(
-                wiremock::ResponseTemplate::new(429)
-                    .insert_header("Retry-After", "0"),
-            )
+            .respond_with(wiremock::ResponseTemplate::new(429).insert_header("Retry-After", "0"))
             .expect(1..)
             .mount(&mock_server)
             .await;
