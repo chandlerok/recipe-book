@@ -18,6 +18,7 @@ use axum::{
 use serde_json::json;
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
+use tower_http::services::fs::ServeFile;
 use tower_http::services::ServeDir;
 use tracing::{info, warn};
 use url::Url;
@@ -325,7 +326,10 @@ pub async fn serve(
         .route("/api/scrape", post(submit_scrape_handler))
         .route("/api/queue/status", get(queue_status_handler))
         .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", ApiDoc::openapi()))
-        .nest_service("/", ServeDir::new(&web_dist))
+        .fallback_service(
+            ServeDir::new(&web_dist)
+                .fallback(ServeFile::new(format!("{web_dist}/index.html"))),
+        )
         .layer(CorsLayer::permissive())
         .with_state(state);
 
