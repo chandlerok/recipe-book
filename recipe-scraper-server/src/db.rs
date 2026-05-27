@@ -701,7 +701,10 @@ mod tests {
         db.save_recipe(&recipe).await.unwrap();
 
         let results = db.search("chikcen", 20).await.unwrap();
-        assert!(!results.is_empty(), "misspelled 'chikcen' should match 'Chicken' via trigram similarity");
+        assert!(
+            !results.is_empty(),
+            "misspelled 'chikcen' should match 'Chicken' via trigram similarity"
+        );
         assert_eq!(results[0].recipe.title, "Chicken Parmesan");
     }
 
