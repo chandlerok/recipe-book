@@ -298,16 +298,25 @@ impl RecipeDb {
 
     pub async fn search(&self, query: &str, limit: i32) -> Result<Vec<SearchHit>> {
         let pattern = format!("%{}%", query);
+        let fuzzy_threshold: f64 = 0.3;
         let rows = sqlx::query(
             r#"
-            SELECT url, title, total_time, ingredients, instructions, image,
-                   COALESCE(ts_rank(search_vector, websearch_to_tsquery('english', $1)), 0)
-                   + CASE WHEN title ILIKE $3 THEN 0.3 ELSE 0 END
-                   + CASE WHEN ingredients ILIKE $3 THEN 0.1 ELSE 0 END AS score
-            FROM recipes
-            WHERE search_vector @@ websearch_to_tsquery('english', $1)
-               OR title ILIKE $3
-               OR ingredients ILIKE $3
+            WITH scored AS (
+                SELECT url, title, total_time, ingredients, instructions, image,
+                       COALESCE(ts_rank(search_vector, websearch_to_tsquery('english', $1)), 0)
+                       + CASE WHEN title ILIKE $3 THEN 0.3 ELSE 0 END
+                       + CASE WHEN ingredients ILIKE $3 THEN 0.1 ELSE 0 END
+                       + GREATEST(word_similarity($1, COALESCE(title, '')), 0) * 0.4
+                       + GREATEST(word_similarity($1, COALESCE(ingredients, '')), 0) * 0.15 AS score
+                FROM recipes
+                WHERE search_vector @@ websearch_to_tsquery('english', $1)
+                   OR title ILIKE $3
+                   OR ingredients ILIKE $3
+                   OR word_similarity($1, COALESCE(title, '')) > $4
+                   OR word_similarity($1, COALESCE(ingredients, '')) > $4
+            )
+            SELECT * FROM scored
+            WHERE score > 0
             ORDER BY score DESC
             LIMIT $2
             "#,
@@ -315,6 +324,7 @@ impl RecipeDb {
         .bind(query)
         .bind(limit)
         .bind(&pattern)
+        .bind(fuzzy_threshold)
         .fetch_all(&self.pool)
         .await?;
 
@@ -673,7 +683,25 @@ mod tests {
         db.save_recipe(&recipe).await.unwrap();
 
         let results = db.search("chick", 20).await.unwrap();
-        assert!(!results.is_empty(), "partial word 'chick' should match 'Chicken'");
+        assert!(
+            !results.is_empty(),
+            "partial word 'chick' should match 'Chicken'"
+        );
+        assert_eq!(results[0].recipe.title, "Chicken Parmesan");
+    }
+
+    #[tokio::test]
+    async fn test_search_misspelled_word() {
+        let _lock = db_mutex().lock().await;
+        let db = setup_db().await;
+        let recipe = ScrapedRecipe {
+            title: "Chicken Parmesan".to_string(),
+            ..sample_recipe("https://example.com/test")
+        };
+        db.save_recipe(&recipe).await.unwrap();
+
+        let results = db.search("chikcen", 20).await.unwrap();
+        assert!(!results.is_empty(), "misspelled 'chikcen' should match 'Chicken' via trigram similarity");
         assert_eq!(results[0].recipe.title, "Chicken Parmesan");
     }
 
