@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Format TypeScript/JSX code with prettier"
+#MISE dir="recipe-scraper-web"
+bun run format

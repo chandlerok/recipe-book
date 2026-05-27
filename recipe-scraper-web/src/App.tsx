@@ -1,4 +1,4 @@
-import { createSignal, createResource } from 'solid-js';
+import { createSignal, createResource } from "solid-js";
 
 interface Recipe {
   url: string;
@@ -16,13 +16,15 @@ interface SearchHit {
 
 async function searchRecipes(query: string): Promise<SearchHit[]> {
   if (!query.trim()) return [];
-  const res = await fetch(`/api/recipes/search?q=${encodeURIComponent(query)}&limit=20`);
+  const res = await fetch(
+    `/api/recipes/search?q=${encodeURIComponent(query)}&limit=20`,
+  );
   if (!res.ok) return [];
   return res.json();
 }
 
 const App = () => {
-  const [query, setQuery] = createSignal('');
+  const [query, setQuery] = createSignal("");
   const [hits] = createResource(query, searchRecipes, { deferStream: true });
 
   return (
@@ -33,12 +35,12 @@ const App = () => {
         type="text"
         placeholder="Search recipes..."
         value={query()}
-        onInput={e => setQuery(e.currentTarget.value)}
+        onInput={(e) => setQuery(e.currentTarget.value)}
         style="width: 100%; padding: 0.75rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;"
       />
 
       <ul style="list-style: none; padding: 0; margin-top: 1rem;">
-        {hits()?.map(hit => (
+        {hits()?.map((hit) => (
           <li style="padding: 0.75rem; border-bottom: 1px solid #eee; display: flex; gap: 1rem;">
             {hit.recipe.image && (
               <img
@@ -67,7 +69,9 @@ const App = () => {
       </ul>
 
       {query() && hits() && hits()!.length === 0 && (
-        <p style="color: #888; text-align: center; margin-top: 2rem;">No recipes found</p>
+        <p style="color: #888; text-align: center; margin-top: 2rem;">
+          No recipes found
+        </p>
       )}
     </div>
   );
