@@ -400,6 +400,7 @@ impl RecipeDb {
 
         {
             let mut cache = self.cache.write().await;
+            cache.retain(|_, e| e.at.elapsed() < Duration::from_secs(30));
             cache.insert(
                 cache_key,
                 CacheEntry {
@@ -407,9 +408,6 @@ impl RecipeDb {
                     at: Instant::now(),
                 },
             );
-            if cache.len() > 500 {
-                cache.retain(|_, e| e.at.elapsed() < Duration::from_secs(60));
-            }
         }
 
         Ok(hits)
