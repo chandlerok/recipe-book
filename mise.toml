@@ -1,4 +1,5 @@
 [tools]
+"aqua:watchexec/cargo-watch" = "latest"
 bun = "latest"
 podman = "latest"
 rust = "latest"
