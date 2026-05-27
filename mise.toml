@@ -1,74 +1,61 @@
 [tools]
 bun = "latest"
 podman = "latest"
-protoc = "latest"
 rust = "latest"
-uv = "latest"
-
-[settings]
-python.uv_venv_auto = "source"
 
 [tasks.pre-commit]
-depends = ["format", "lint", "typecheck", "proto-gen", "test"]
+depends = ["format", "lint", "typecheck", "test"]
 
-[tasks.proto-gen]
-depends = ["proto-gen-py", "proto-gen-rs"]
+[tasks.dev]
+depends = ["dev-server", "dev-web"]
+
+[tasks.build]
+depends = ["build-server", "build-web"]
 
 [tasks.format]
-depends = ["format-rs", "format-py"]
+depends = ["format-rs"]
 
 [tasks.lint]
-depends = ["lint-py", "lint-rs"]
+depends = ["lint-rs"]
 
 [tasks.typecheck]
-depends = ["typecheck-py", "typecheck-rs"]
+depends = ["typecheck-rs"]
 
 [tasks.test]
-depends = ["test-py", "test-rs"]
+depends = ["test-server"]
 
-[tasks.proto-gen-py]
-dir = "recipe-scraper-py"
-run = "uv run -m grpc_tools.protoc --proto_path=src/proto --python_out=src/proto --pyi_out=src/proto --grpc_python_out=src/proto recipe.proto"
+[tasks.dev-server]
+dir = "recipe-scraper-server"
+run = "cargo watch -x run"
 
-[tasks.format-py]
-dir = "recipe-scraper-py"
-run = "uv run ruff format"
+[tasks.dev-web]
+dir = "recipe-scraper-web"
+run = "bun run dev"
 
-[tasks.lint-py]
-dir = "recipe-scraper-py"
-run = "uv run ruff check --fix --unsafe-fixes"
-depends = ["format-py"]
+[tasks.build-server]
+dir = "recipe-scraper-server"
+run = "cargo build --release"
 
-[tasks.typecheck-py]
-dir = "recipe-scraper-py"
-run = "uv run ty check"
-wait_for = ["format-py", "lint-py"]
-
-[tasks.test-py]
-dir = "recipe-scraper-py"
-run = "uv run pytest"
-wait_for = ["format-py", "lint-py", "proto-gen-py"]
-
-[tasks.proto-gen-rs]
-dir = "recipe-crawler-rs"
-run = "cargo build"
+[tasks.build-web]
+dir = "recipe-scraper-web"
+run = "bun run build"
 
 [tasks.format-rs]
-dir = "recipe-crawler-rs"
+dir = "recipe-scraper-server"
 run = "cargo fmt"
 
 [tasks.lint-rs]
-dir = "recipe-crawler-rs"
+dir = "recipe-scraper-server"
 run = "cargo check"
 wait_for = ["format-rs"]
 
 [tasks.typecheck-rs]
-dir = "recipe-crawler-rs"
+dir = "recipe-scraper-server"
 run = "cargo clippy"
 wait_for = ["format-rs"]
 
-[tasks.test-rs]
-dir = "recipe-crawler-rs"
+[tasks.test-server]
+dir = "recipe-scraper-server"
 run = "cargo test"
 wait_for = ["lint-rs", "typecheck-rs"]
 
