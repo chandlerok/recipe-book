@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Lint all code (Rust)"
+#MISE depends=["lint-rs"]
+true

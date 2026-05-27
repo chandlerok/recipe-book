@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Format all code (Rust)"
+#MISE depends=["format-rs"]
+true

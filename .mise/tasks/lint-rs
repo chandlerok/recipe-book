@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Lint Rust code with cargo check"
+#MISE dir="recipe-scraper-server"
+#MISE depends=["format-rs"]
+cargo check

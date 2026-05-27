@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Build both server and frontend for production"
+#MISE depends=["build-server", "build-web"]
+true

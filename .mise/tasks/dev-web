@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Run the SolidJS frontend in development mode"
+#MISE dir="recipe-scraper-web"
+bun run dev

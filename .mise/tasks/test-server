@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Run Rust tests"
+#MISE dir="recipe-scraper-server"
+#MISE depends=["lint-rs", "typecheck-rs"]
+cargo test

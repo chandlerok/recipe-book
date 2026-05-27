@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Run all pre-commit checks: format, lint, typecheck, and tests"
+#MISE depends=["format", "lint", "typecheck", "test"]
+true

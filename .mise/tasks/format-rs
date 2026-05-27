@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Format Rust code with cargo fmt"
+#MISE dir="recipe-scraper-server"
+cargo fmt

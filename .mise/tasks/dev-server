@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Run the Axum server in development mode with auto-reload"
+#MISE dir="recipe-scraper-server"
+cargo watch -x run

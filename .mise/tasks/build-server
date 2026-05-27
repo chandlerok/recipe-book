@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Build the Axum server for production"
+#MISE dir="recipe-scraper-server"
+cargo build --release

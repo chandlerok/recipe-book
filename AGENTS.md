@@ -9,10 +9,13 @@ recipe-scraper-web/       → SolidJS frontend (search box + results list)
 
 ## Commands
 
+Tasks are defined as executable scripts in `.mise/tasks/`. Run them with `mise run <task>`.
+
 ### Development
 - `mise run dev` — Run both server and frontend in dev mode
 - `mise run build` — Build both server and frontend for production
 - `mise run test` — Run Rust tests
+- `mise run pre-commit` — Run all checks (run automatically by git hooks)
 
 ### Individual Commands
 - `cargo run` — Run the Axum server (from recipe-scraper-server/)
