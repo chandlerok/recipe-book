@@ -441,6 +441,20 @@ pub async fn crawl_all_sites(
     client: &reqwest::Client,
     proxy_pool: Option<Arc<ProxyPool>>,
 ) {
+    match db.try_acquire_crawl_lock().await {
+        Ok(true) => info!("acquired crawl lock"),
+        Ok(false) => {
+            info!("crawl lock held by another instance, skipping");
+            return;
+        }
+        Err(e) => {
+            warn!(error = %e, "failed to acquire crawl lock, skipping");
+            return;
+        }
+    }
+
+    info!("starting crawl of {} sites", ALL_SITES.len());
+
     let (tx, mut rx) = mpsc::channel(1024);
     let mut handles = Vec::new();
 
@@ -468,6 +482,10 @@ pub async fn crawl_all_sites(
     }
 
     info!("crawl_all_sites complete");
+
+    if let Err(e) = db.release_crawl_lock().await {
+        warn!(error = %e, "failed to release crawl lock");
+    }
 }
 
 async fn crawl(

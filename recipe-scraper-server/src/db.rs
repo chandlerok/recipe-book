@@ -440,6 +440,20 @@ impl RecipeDb {
 
         Ok(stats)
     }
+
+    pub async fn try_acquire_crawl_lock(&self) -> Result<bool> {
+        let row: (bool,) = sqlx::query_as("SELECT pg_try_advisory_lock(42)")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(row.0)
+    }
+
+    pub async fn release_crawl_lock(&self) -> Result<()> {
+        sqlx::query("SELECT pg_advisory_unlock(42)")
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
