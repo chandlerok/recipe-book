@@ -181,10 +181,8 @@ pub async fn fetch_page(
 
 pub fn parse_recipe(html: &str, url: &str) -> Result<ScrapedRecipe> {
     let entries = SchemaOrgEntry::scrape_html(html);
-    let recipes: Vec<recipe_scraper::SchemaOrgRecipe> = entries
-        .iter()
-        .flat_map(|e| e.extract_recipes())
-        .collect();
+    let recipes: Vec<recipe_scraper::SchemaOrgRecipe> =
+        entries.iter().flat_map(|e| e.extract_recipes()).collect();
 
     let recipe = recipes
         .first()

@@ -1,15 +1,15 @@
 use std::{
     collections::HashSet,
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     },
     time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result};
-use quick_xml::events::Event;
 use quick_xml::Reader;
+use quick_xml::events::Event;
 use rand::Rng;
 use reqwest::header::{
     ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, CONNECTION, DNT, REFERER, USER_AGENT,
@@ -687,14 +687,15 @@ async fn crawl_pages(
 
         info!(site = site.name, url = %page_url, "fetching page");
 
-        let response = match fetch_page(client, &page_url, site.base_url, proxy_pool.as_deref()).await {
-            Ok(r) => r,
-            Err(e) => {
-                warn!(site = site.name, url = %page_url, error = %e, "fetch failed");
-                sleep(REQUEST_DELAY).await;
-                continue;
-            }
-        };
+        let response =
+            match fetch_page(client, &page_url, site.base_url, proxy_pool.as_deref()).await {
+                Ok(r) => r,
+                Err(e) => {
+                    warn!(site = site.name, url = %page_url, error = %e, "fetch failed");
+                    sleep(REQUEST_DELAY).await;
+                    continue;
+                }
+            };
 
         let page_for_parse = page_url.clone();
         let recipe_sel = recipe_link_sel.clone();

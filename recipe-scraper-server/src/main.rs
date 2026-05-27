@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
-use tracing_subscriber::EnvFilter;
 use tokio_cron_scheduler::{Job, JobScheduler};
+use tracing_subscriber::EnvFilter;
 
 mod crawler;
 mod db;
@@ -48,8 +48,8 @@ async fn main() -> Result<()> {
     let crawler_proxy_pool = crawler::ProxyPool::from_env();
 
     let sched = JobScheduler::new().await?;
-    sched.add(
-        Job::new_async("0 0 0 * * *", {
+    sched
+        .add(Job::new_async("0 0 0 * * *", {
             let db = db.clone();
             let client = crawler_client.clone();
             let proxy_pool = crawler_proxy_pool.clone();
@@ -63,9 +63,8 @@ async fn main() -> Result<()> {
                     tracing::info!("daily crawl complete");
                 })
             }
-        })?,
-    )
-    .await?;
+        })?)
+        .await?;
 
     sched.start().await?;
 

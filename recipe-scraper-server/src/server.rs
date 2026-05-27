@@ -111,7 +111,7 @@ async fn search_recipes_handler(
         );
     }
 
-    let limit = params.limit.unwrap_or(20).max(1).min(100);
+    let limit = params.limit.unwrap_or(20).clamp(1, 100);
 
     match state.db.search(params.q.trim(), limit).await {
         Ok(hits) => {
@@ -145,15 +145,11 @@ async fn get_recipe_handler(
     Query(params): Query<RecipeQuery>,
 ) -> impl IntoResponse {
     match state.db.get_recipe(&params.url).await {
-        Ok(Some(recipe)) => {
-            (StatusCode::OK, serde_json::to_string(&recipe).unwrap())
-        }
-        Ok(None) => {
-            (
-                StatusCode::NOT_FOUND,
-                json!({"error": "recipe not found"}).to_string(),
-            )
-        }
+        Ok(Some(recipe)) => (StatusCode::OK, serde_json::to_string(&recipe).unwrap()),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            json!({"error": "recipe not found"}).to_string(),
+        ),
         Err(e) => {
             warn!("get recipe error: {}", e);
             (
@@ -212,13 +208,9 @@ async fn submit_scrape_handler(
     ),
     tag = "scrape"
 )]
-async fn queue_status_handler(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+async fn queue_status_handler(State(state): State<AppState>) -> impl IntoResponse {
     match state.db.queue_stats().await {
-        Ok(stats) => {
-            (StatusCode::OK, serde_json::to_string(&stats).unwrap())
-        }
+        Ok(stats) => (StatusCode::OK, serde_json::to_string(&stats).unwrap()),
         Err(e) => {
             warn!("queue stats error: {}", e);
             (
@@ -332,10 +324,7 @@ pub async fn serve(
         .route("/api/recipes", get(get_recipe_handler))
         .route("/api/scrape", post(submit_scrape_handler))
         .route("/api/queue/status", get(queue_status_handler))
-        .merge(
-            SwaggerUi::new("/docs")
-                .url("/api-docs/openapi.json", ApiDoc::openapi()),
-        )
+        .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .nest_service("/", ServeDir::new(&web_dist))
         .layer(CorsLayer::permissive())
         .with_state(state);
