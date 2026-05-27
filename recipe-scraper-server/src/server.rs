@@ -18,8 +18,8 @@ use axum::{
 use serde_json::json;
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
-use tower_http::services::fs::ServeFile;
 use tower_http::services::ServeDir;
+use tower_http::services::fs::ServeFile;
 use tracing::{info, warn};
 use url::Url;
 use utoipa::OpenApi;
@@ -327,8 +327,7 @@ pub async fn serve(
         .route("/api/queue/status", get(queue_status_handler))
         .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .fallback_service(
-            ServeDir::new(&web_dist)
-                .fallback(ServeFile::new(format!("{web_dist}/index.html"))),
+            ServeDir::new(&web_dist).fallback(ServeFile::new(format!("{web_dist}/index.html"))),
         )
         .layer(CorsLayer::permissive())
         .with_state(state);
