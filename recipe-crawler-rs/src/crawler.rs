@@ -1,8 +1,8 @@
 use std::{
     collections::HashSet,
     sync::{
-        Arc,
         atomic::{AtomicUsize, Ordering},
+        Arc,
     },
     time::{Duration, Instant},
 };
@@ -18,6 +18,58 @@ use scraper::{Html, Selector};
 use tokio::{sync::mpsc, time::sleep};
 use tracing::{info, warn};
 use url::Url;
+
+pub struct ProxyPool {
+    clients: Vec<reqwest::Client>,
+}
+
+impl ProxyPool {
+    pub fn from_env() -> Option<Arc<Self>> {
+        let proxy_list = std::env::var("PROXY_LIST").ok();
+        let proxy_url = std::env::var("PROXY_URL").ok();
+
+        let urls: Vec<String> = match (proxy_list, proxy_url) {
+            (Some(list), _) if !list.is_empty() => list
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect(),
+            (_, Some(url)) if !url.is_empty() => vec![url],
+            _ => return None,
+        };
+
+        if urls.is_empty() {
+            return None;
+        }
+
+        let clients: Vec<reqwest::Client> = urls
+            .into_iter()
+            .filter_map(|u| {
+                let proxy = reqwest::Proxy::all(&u).ok()?;
+                reqwest::Client::builder()
+                    .proxy(proxy)
+                    .timeout(Duration::from_secs(30))
+                    .build()
+                    .ok()
+            })
+            .collect();
+
+        if clients.is_empty() {
+            return None;
+        }
+
+        info!("proxy pool initialized: count={}", clients.len());
+        Some(Arc::new(Self { clients }))
+    }
+
+    pub fn next(&self) -> Option<&reqwest::Client> {
+        if self.clients.is_empty() {
+            return None;
+        }
+        let idx = rand::thread_rng().gen_range(0..self.clients.len());
+        Some(&self.clients[idx])
+    }
+}
 
 const REQUEST_DELAY: Duration = Duration::from_secs(3);
 const MAX_RETRIES: u32 = 2;
@@ -384,17 +436,19 @@ pub async fn crawl(
     site: &SiteConfig,
     client: &reqwest::Client,
     tx: mpsc::Sender<String>,
+    proxy_pool: Option<Arc<ProxyPool>>,
 ) -> Result<()> {
     if site.use_sitemap {
-        return crawl_sitemap(site, client, tx).await;
+        return crawl_sitemap(site, client, tx, proxy_pool).await;
     }
-    crawl_pages(site, client, tx).await
+    crawl_pages(site, client, tx, proxy_pool).await
 }
 
 async fn crawl_sitemap(
     site: &SiteConfig,
     client: &reqwest::Client,
     tx: mpsc::Sender<String>,
+    proxy_pool: Option<Arc<ProxyPool>>,
 ) -> Result<()> {
     let site_name = site.name;
     info!(site = site_name, "starting sitemap crawl");
@@ -438,6 +492,7 @@ async fn crawl_sitemap(
         let seen = seen.clone();
         let in_flight = in_flight.clone();
         let last_req = last_req.clone();
+        let proxy_pool = proxy_pool.clone();
 
         tokio::spawn(async move {
             {
@@ -449,7 +504,7 @@ async fn crawl_sitemap(
                 *last = Instant::now();
             }
 
-            match fetch_page(&client, &url, base_url).await {
+            match fetch_page(&client, &url, base_url, proxy_pool.as_deref()).await {
                 Ok(body) => {
                     if let Ok(Ok((new_sitemaps, recipes))) =
                         tokio::task::spawn_blocking(move || parse_sitemap(&body, &recipe_test))
@@ -565,6 +620,7 @@ async fn crawl_pages(
     site: &SiteConfig,
     client: &reqwest::Client,
     tx: mpsc::Sender<String>,
+    proxy_pool: Option<Arc<ProxyPool>>,
 ) -> Result<()> {
     let recipe_link_sel = Selector::parse(site.recipe_link_selector).unwrap();
     let next_page_sel =
@@ -593,7 +649,7 @@ async fn crawl_pages(
 
         info!(site = site.name, url = %page_url, "fetching page");
 
-        let response = match fetch_page(client, &page_url, site.base_url).await {
+        let response = match fetch_page(client, &page_url, site.base_url, proxy_pool.as_deref()).await {
             Ok(r) => r,
             Err(e) => {
                 warn!(site = site.name, url = %page_url, error = %e, "fetch failed");
@@ -667,13 +723,19 @@ async fn crawl_pages(
     Ok(())
 }
 
-async fn fetch_page(client: &reqwest::Client, url: &str, site_base_url: &str) -> Result<String> {
+async fn fetch_page(
+    client: &reqwest::Client,
+    url: &str,
+    site_base_url: &str,
+    proxy_pool: Option<&ProxyPool>,
+) -> Result<String> {
+    let effective_client = proxy_pool.and_then(|p| p.next()).unwrap_or(client);
     let mut last_error: Option<anyhow::Error> = None;
 
     for attempt in 0..=MAX_RETRIES {
         let ua = next_user_agent();
 
-        let result = client
+        let result = effective_client
             .get(url)
             .header(USER_AGENT, ua)
             .header(
@@ -1047,7 +1109,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let result = fetch_page(&client, &mock_server.uri(), &mock_server.uri()).await;
+        let result = fetch_page(&client, &mock_server.uri(), &mock_server.uri(), None).await;
         assert!(result.is_err());
     }
 
@@ -1065,7 +1127,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let result = fetch_page(&client, &mock_server.uri(), &mock_server.uri()).await;
+        let result = fetch_page(&client, &mock_server.uri(), &mock_server.uri(), None).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "recipe content");
     }
@@ -1084,7 +1146,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let result = fetch_page(&client, &mock_server.uri(), &mock_server.uri()).await;
+        let result = fetch_page(&client, &mock_server.uri(), &mock_server.uri(), None).await;
         assert!(result.is_err());
     }
 
@@ -1108,7 +1170,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let result = fetch_page(&client, &mock_server.uri(), &mock_server.uri()).await;
+        let result = fetch_page(&client, &mock_server.uri(), &mock_server.uri(), None).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "success");
     }

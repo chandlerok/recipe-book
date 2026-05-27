@@ -23,18 +23,16 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    let mut client_builder = reqwest::Client::builder().timeout(Duration::from_secs(60));
+    let proxy_pool = crawler::ProxyPool::from_env();
 
-    if let Ok(proxy_url) = std::env::var("PROXY_URL") {
-        let proxy = reqwest::Proxy::all(&proxy_url)
-            .with_context(|| format!("invalid PROXY_URL: {proxy_url}"))?;
-        client_builder = client_builder.proxy(proxy);
-        info!(%proxy_url, "proxy configured");
-    }
-
-    let http_client = client_builder
+    let http_client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(60))
         .build()
         .context("failed to build HTTP client")?;
+
+    if proxy_pool.is_some() {
+        info!("proxy pool configured: each request uses a random proxy");
+    }
 
     info!(grpc_addr = GRPC_ADDR, "connecting to gRPC server");
     let channel = Channel::from_static(GRPC_ADDR)
@@ -50,11 +48,12 @@ async fn main() -> Result<()> {
         let client = http_client.clone();
         let tx = tx.clone();
         let name = site.name;
+        let proxy_pool = proxy_pool.clone();
 
         let jitter_ms: u64 = rand::thread_rng().gen_range(0..STARTUP_JITTER_MAX.as_millis() as u64);
         handles.push(tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(jitter_ms)).await;
-            if let Err(e) = crawler::crawl(site, &client, tx).await {
+            if let Err(e) = crawler::crawl(site, &client, tx, proxy_pool).await {
                 warn!(site = name, error = %e, "crawl error");
             }
         }));
