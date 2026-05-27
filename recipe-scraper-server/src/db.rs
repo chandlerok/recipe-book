@@ -320,12 +320,7 @@ impl RecipeDb {
         }))
     }
 
-    pub async fn search(
-        &self,
-        query: &str,
-        limit: i32,
-        offset: i32,
-    ) -> Result<SearchResults> {
+    pub async fn search(&self, query: &str, limit: i32, offset: i32) -> Result<SearchResults> {
         if query.len() < 2 {
             return Ok(SearchResults {
                 hits: Vec::new(),
@@ -426,7 +421,10 @@ impl RecipeDb {
             cache.retain(|_, e| e.at.elapsed() < Duration::from_secs(30));
             cache.insert(
                 cache_key,
-                CacheEntry { hits: results.clone(), at: Instant::now() },
+                CacheEntry {
+                    hits: results.clone(),
+                    at: Instant::now(),
+                },
             );
         }
 

@@ -1,4 +1,4 @@
-import { createSignal, createResource } from "solid-js";
+import { createSignal, createResource, createMemo, Show } from "solid-js";
 
 interface Recipe {
   url: string;
@@ -14,18 +14,60 @@ interface SearchHit {
   score: number;
 }
 
-async function searchRecipes(query: string): Promise<SearchHit[]> {
-  if (!query.trim()) return [];
+interface SearchResults {
+  hits: SearchHit[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+interface SearchParams {
+  q: string;
+  offset: number;
+}
+
+async function searchRecipes(
+  params: () => SearchParams | undefined,
+): Promise<SearchResults | undefined> {
+  const p = params();
+  if (!p || !p.q.trim()) return undefined;
   const res = await fetch(
-    `/api/recipes/search?q=${encodeURIComponent(query)}&limit=20`,
+    `/api/recipes/search?q=${encodeURIComponent(p.q)}&limit=20&offset=${p.offset}`,
   );
-  if (!res.ok) return [];
+  if (!res.ok) return undefined;
   return res.json();
 }
 
 const App = () => {
   const [query, setQuery] = createSignal("");
-  const [hits] = createResource(query, searchRecipes, { deferStream: true });
+  const [offset, setOffset] = createSignal(0);
+
+  const searchParams = createMemo(() => {
+    const q = query().trim();
+    if (!q) return undefined;
+    return { q, offset: offset() };
+  });
+
+  const [results] = createResource(searchParams, searchRecipes, {
+    deferStream: true,
+  });
+
+  const hits = createMemo(() => results()?.hits ?? []);
+  const total = createMemo(() => results()?.total ?? 0);
+  const limit = 20;
+  const pageCount = createMemo(() => Math.ceil(total() / limit) || 1);
+  const currentPage = createMemo(() => Math.floor(offset() / limit) + 1);
+
+  const onInput = (e: Event) => {
+    setQuery((e.target as HTMLInputElement).value);
+    setOffset(0);
+  };
+
+  const goToPage = (page: number) => {
+    setOffset((page - 1) * limit);
+  };
+
+  const [selected, setSelected] = createSignal<Recipe | null>(null);
 
   return (
     <div style="max-width: 640px; margin: 0 auto; padding: 2rem 1rem; font-family: system-ui, sans-serif;">
@@ -35,44 +77,129 @@ const App = () => {
         type="text"
         placeholder="Search recipes..."
         value={query()}
-        onInput={(e) => setQuery(e.currentTarget.value)}
+        onInput={onInput}
         style="width: 100%; padding: 0.75rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;"
       />
 
-      <ul style="list-style: none; padding: 0; margin-top: 1rem;">
-        {hits()?.map((hit) => (
-          <li style="padding: 0.75rem; border-bottom: 1px solid #eee; display: flex; gap: 1rem;">
-            {hit.recipe.image && (
-              <img
-                src={hit.recipe.image}
-                alt={hit.recipe.title}
-                style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; flex-shrink: 0;"
-              />
-            )}
-            <div>
-              <a
-                href={hit.recipe.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style="font-weight: 600; color: #1a73e8; text-decoration: none;"
-              >
-                {hit.recipe.title}
-              </a>
-              {hit.recipe.total_time > 0 && (
-                <p style="margin: 0.25rem 0 0; font-size: 0.85rem; color: #666;">
-                  {hit.recipe.total_time} min
-                </p>
+      <Show when={hits().length > 0}>
+        <ul style="list-style: none; padding: 0; margin-top: 1rem;">
+          {hits().map((hit) => (
+            <li
+              onClick={() => setSelected(hit.recipe)}
+              style="padding: 0.75rem; border-bottom: 1px solid #eee; display: flex; gap: 1rem; cursor: pointer;"
+            >
+              {hit.recipe.image && (
+                <img
+                  src={hit.recipe.image}
+                  alt={hit.recipe.title}
+                  style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; flex-shrink: 0;"
+                />
               )}
-            </div>
-          </li>
-        ))}
-      </ul>
+              <div>
+                <span style="font-weight: 600; color: #1a73e8;">
+                  {hit.recipe.title}
+                </span>
+                {hit.recipe.total_time > 0 && (
+                  <p style="margin: 0.25rem 0 0; font-size: 0.85rem; color: #666;">
+                    {hit.recipe.total_time} min
+                  </p>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
 
-      {query() && hits() && hits()!.length === 0 && (
+        <div style="display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1rem;">
+          <button
+            onClick={() => goToPage(currentPage() - 1)}
+            disabled={currentPage() <= 1}
+            style="padding: 0.4rem 0.8rem; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; font-size: 0.9rem;"
+          >
+            ◀ Prev
+          </button>
+          <span style="font-size: 0.9rem; color: #555;">
+            Page {currentPage()} of {pageCount()} ({total()} results)
+          </span>
+          <button
+            onClick={() => goToPage(currentPage() + 1)}
+            disabled={currentPage() >= pageCount()}
+            style="padding: 0.4rem 0.8rem; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; font-size: 0.9rem;"
+          >
+            Next ▶
+          </button>
+        </div>
+      </Show>
+
+      <Show when={query().trim() && hits().length === 0 && !results.loading}>
         <p style="color: #888; text-align: center; margin-top: 2rem;">
           No recipes found
         </p>
-      )}
+      </Show>
+
+      <Show when={selected()} keyed>
+        {(recipe) => (
+          <>
+            <div
+              onClick={() => setSelected(null)}
+              style="position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 998;"
+            />
+            <div style="position: fixed; top: 0; right: 0; bottom: 0; width: min(480px, 100vw); background: #fff; z-index: 999; overflow-y: auto; box-shadow: -4px 0 12px rgba(0,0,0,0.15); padding: 1.5rem; box-sizing: border-box; font-family: system-ui, sans-serif;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 style="margin: 0; font-size: 1.25rem; line-height: 1.3;">
+                  {recipe.title}
+                </h2>
+                <button
+                  onClick={() => setSelected(null)}
+                  style="background: none; border: none; font-size: 1.5rem; cursor: pointer; padding: 0; line-height: 1; color: #888;"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {recipe.image && (
+                <img
+                  src={recipe.image}
+                  alt={recipe.title}
+                  style="width: 100%; max-height: 300px; object-fit: cover; border-radius: 8px; margin-bottom: 1rem;"
+                />
+              )}
+
+              {recipe.total_time > 0 && (
+                <p style="font-size: 0.9rem; color: #666; margin-bottom: 1rem;">
+                  Total time: {recipe.total_time} min
+                </p>
+              )}
+
+              <h3 style="font-size: 1rem; margin-bottom: 0.5rem;">
+                Ingredients
+              </h3>
+              <ul style="padding-left: 1.25rem; margin-bottom: 1.25rem; line-height: 1.6;">
+                {recipe.ingredients.map((ing) => (
+                  <li>{ing}</li>
+                ))}
+              </ul>
+
+              <h3 style="font-size: 1rem; margin-bottom: 0.5rem;">
+                Instructions
+              </h3>
+              <ol style="padding-left: 1.25rem; margin-bottom: 1.25rem; line-height: 1.6;">
+                {recipe.instructions.map((step) => (
+                  <li style="margin-bottom: 0.5rem;">{step}</li>
+                ))}
+              </ol>
+
+              <a
+                href={recipe.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style="display: inline-block; margin-top: 0.5rem; color: #1a73e8; font-size: 0.9rem;"
+              >
+                View original recipe ↗
+              </a>
+            </div>
+          </>
+        )}
+      </Show>
     </div>
   );
 };

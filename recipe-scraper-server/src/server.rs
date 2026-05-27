@@ -26,7 +26,9 @@ use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::db::RecipeDb;
-use crate::models::{QueueStats, Recipe, RecipeQuery, ScrapeRequest, SearchHit, SearchParams, SearchResults};
+use crate::models::{
+    QueueStats, Recipe, RecipeQuery, ScrapeRequest, SearchHit, SearchParams, SearchResults,
+};
 use crate::scraper::{self, ProxyPool};
 
 pub const SCRAPE_DELAY: Duration = Duration::from_secs(2);
