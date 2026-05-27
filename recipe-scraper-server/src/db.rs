@@ -326,10 +326,10 @@ impl RecipeDb {
         let cache_key = format!("{}:{}", query, limit);
         {
             let cache = self.cache.read().await;
-            if let Some(entry) = cache.get(&cache_key) {
-                if entry.at.elapsed() < Duration::from_secs(30) {
-                    return Ok(entry.hits.clone());
-                }
+            if let Some(entry) = cache.get(&cache_key)
+                && entry.at.elapsed() < Duration::from_secs(30)
+            {
+                return Ok(entry.hits.clone());
             }
         }
 
