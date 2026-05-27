@@ -1,14 +1,33 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
 use anyhow::{Context, Result};
 use sqlx::Row;
 use sqlx::postgres::PgPoolOptions;
+use tokio::sync::RwLock;
 use tracing::info;
 
 use crate::models::{QueueStats, Recipe, SearchHit};
 use crate::scraper::ScrapedRecipe;
 
-#[derive(Clone)]
+struct CacheEntry {
+    hits: Vec<SearchHit>,
+    at: Instant,
+}
+
 pub struct RecipeDb {
     pool: sqlx::PgPool,
+    cache: Arc<RwLock<HashMap<String, CacheEntry>>>,
+}
+
+impl Clone for RecipeDb {
+    fn clone(&self) -> Self {
+        Self {
+            pool: self.pool.clone(),
+            cache: self.cache.clone(),
+        }
+    }
 }
 
 impl RecipeDb {
@@ -21,7 +40,10 @@ impl RecipeDb {
             .await
             .context("failed to connect to PostgreSQL")?;
 
-        let db = Self { pool };
+        let db = Self {
+            pool,
+            cache: Arc::new(RwLock::new(HashMap::new())),
+        };
         db.init_db().await?;
         Ok(db)
     }
@@ -297,26 +319,47 @@ impl RecipeDb {
     }
 
     pub async fn search(&self, query: &str, limit: i32) -> Result<Vec<SearchHit>> {
+        if query.len() < 2 {
+            return Ok(Vec::new());
+        }
+
+        let cache_key = format!("{}:{}", query, limit);
+        {
+            let cache = self.cache.read().await;
+            if let Some(entry) = cache.get(&cache_key) {
+                if entry.at.elapsed() < Duration::from_secs(30) {
+                    return Ok(entry.hits.clone());
+                }
+            }
+        }
+
         let pattern = format!("%{}%", query);
-        let fuzzy_threshold: f64 = 0.3;
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query("SELECT set_limit(0.18)")
+            .execute(&mut *tx)
+            .await?;
+
         let rows = sqlx::query(
             r#"
-            WITH scored AS (
-                SELECT url, title, total_time, ingredients, instructions, image,
-                       COALESCE(ts_rank(search_vector, websearch_to_tsquery('english', $1)), 0)
-                       + CASE WHEN title ILIKE $3 THEN 0.3 ELSE 0 END
-                       + CASE WHEN ingredients ILIKE $3 THEN 0.1 ELSE 0 END
-                       + GREATEST(word_similarity($1, COALESCE(title, '')), 0) * 0.4
-                       + GREATEST(word_similarity($1, COALESCE(ingredients, '')), 0) * 0.15 AS score
-                FROM recipes
+            WITH matched AS (
+                SELECT url FROM recipes
                 WHERE search_vector @@ websearch_to_tsquery('english', $1)
-                   OR title ILIKE $3
-                   OR ingredients ILIKE $3
-                   OR word_similarity($1, COALESCE(title, '')) > $4
-                   OR word_similarity($1, COALESCE(ingredients, '')) > $4
+                UNION
+                SELECT url FROM recipes WHERE title ILIKE $3
+                UNION
+                SELECT url FROM recipes WHERE ingredients ILIKE $3
+                UNION
+                SELECT url FROM recipes WHERE title % $1
             )
-            SELECT * FROM scored
-            WHERE score > 0
+            SELECT r.url, r.title, r.total_time, r.ingredients, r.instructions, r.image,
+                   COALESCE(ts_rank(r.search_vector, websearch_to_tsquery('english', $1)), 0)
+                   + CASE WHEN r.title ILIKE $3 THEN 0.3 ELSE 0 END
+                   + CASE WHEN r.ingredients ILIKE $3 THEN 0.1 ELSE 0 END
+                   + GREATEST(word_similarity($1, COALESCE(r.title, '')), 0) * 0.4
+                   + GREATEST(word_similarity($1, COALESCE(r.ingredients, '')), 0) * 0.15 AS score
+            FROM recipes r
+            JOIN matched m ON r.url = m.url
             ORDER BY score DESC
             LIMIT $2
             "#,
@@ -324,11 +367,12 @@ impl RecipeDb {
         .bind(query)
         .bind(limit)
         .bind(&pattern)
-        .bind(fuzzy_threshold)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *tx)
         .await?;
 
-        let hits = rows
+        tx.commit().await?;
+
+        let hits: Vec<SearchHit> = rows
             .into_iter()
             .map(|r| {
                 let ingredients_str: String = r.get("ingredients");
@@ -353,6 +397,20 @@ impl RecipeDb {
                 }
             })
             .collect();
+
+        {
+            let mut cache = self.cache.write().await;
+            cache.insert(
+                cache_key,
+                CacheEntry {
+                    hits: hits.clone(),
+                    at: Instant::now(),
+                },
+            );
+            if cache.len() > 500 {
+                cache.retain(|_, e| e.at.elapsed() < Duration::from_secs(60));
+            }
+        }
 
         Ok(hits)
     }
