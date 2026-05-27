@@ -68,6 +68,24 @@ impl RecipeDb {
         .execute(&self.pool)
         .await?;
 
+        sqlx::query("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+            .execute(&self.pool)
+            .await?;
+
+        sqlx::query(
+            r#"CREATE INDEX IF NOT EXISTS idx_recipes_title_trgm
+               ON recipes USING GIN (title gin_trgm_ops)"#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            r#"CREATE INDEX IF NOT EXISTS idx_recipes_ingredients_trgm
+               ON recipes USING GIN (ingredients gin_trgm_ops)"#,
+        )
+        .execute(&self.pool)
+        .await?;
+
         sqlx::query(
             r#"
             CREATE OR REPLACE FUNCTION recipes_search_update() RETURNS trigger AS $$
@@ -279,18 +297,24 @@ impl RecipeDb {
     }
 
     pub async fn search(&self, query: &str, limit: i32) -> Result<Vec<SearchHit>> {
+        let pattern = format!("%{}%", query);
         let rows = sqlx::query(
             r#"
             SELECT url, title, total_time, ingredients, instructions, image,
-                   ts_rank(search_vector, plainto_tsquery('english', $1)) AS score
+                   COALESCE(ts_rank(search_vector, websearch_to_tsquery('english', $1)), 0)
+                   + CASE WHEN title ILIKE $3 THEN 0.3 ELSE 0 END
+                   + CASE WHEN ingredients ILIKE $3 THEN 0.1 ELSE 0 END AS score
             FROM recipes
-            WHERE search_vector @@ plainto_tsquery('english', $1)
+            WHERE search_vector @@ websearch_to_tsquery('english', $1)
+               OR title ILIKE $3
+               OR ingredients ILIKE $3
             ORDER BY score DESC
             LIMIT $2
             "#,
         )
         .bind(query)
         .bind(limit)
+        .bind(&pattern)
         .fetch_all(&self.pool)
         .await?;
 
@@ -299,8 +323,7 @@ impl RecipeDb {
             .map(|r| {
                 let ingredients_str: String = r.get("ingredients");
                 let instructions_str: String = r.get("instructions");
-                let score_f32: f32 = r.get("score");
-                let score = score_f32 as f64;
+                let score: f64 = r.get("score");
 
                 let ingredients: Vec<String> =
                     serde_json::from_str(&ingredients_str).unwrap_or_default();
@@ -637,6 +660,21 @@ mod tests {
         db.save_recipe(&beta).await.unwrap();
         assert_eq!(db.search("beta", 20).await.unwrap().len(), 1);
         assert_eq!(db.search("alpha", 20).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_search_partial_word_match() {
+        let _lock = db_mutex().lock().await;
+        let db = setup_db().await;
+        let recipe = ScrapedRecipe {
+            title: "Chicken Parmesan".to_string(),
+            ..sample_recipe("https://example.com/test")
+        };
+        db.save_recipe(&recipe).await.unwrap();
+
+        let results = db.search("chick", 20).await.unwrap();
+        assert!(!results.is_empty(), "partial word 'chick' should match 'Chicken'");
+        assert_eq!(results[0].recipe.title, "Chicken Parmesan");
     }
 
     #[tokio::test]
