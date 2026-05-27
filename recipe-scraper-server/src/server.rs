@@ -26,7 +26,7 @@ use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::db::RecipeDb;
-use crate::models::{QueueStats, Recipe, RecipeQuery, ScrapeRequest, SearchHit, SearchParams};
+use crate::models::{QueueStats, Recipe, RecipeQuery, ScrapeRequest, SearchHit, SearchParams, SearchResults};
 use crate::scraper::{self, ProxyPool};
 
 pub const SCRAPE_DELAY: Duration = Duration::from_secs(2);
@@ -79,7 +79,7 @@ pub struct AppState {
         queue_status_handler,
     ),
     components(
-        schemas(Recipe, SearchHit, QueueStats, ScrapeRequest, SearchParams)
+        schemas(Recipe, SearchHit, SearchResults, QueueStats, ScrapeRequest, SearchParams)
     ),
     tags(
         (name = "recipes", description = "Recipe search and retrieval"),
@@ -94,9 +94,10 @@ struct ApiDoc;
     params(
         ("q" = String, Query, description = "Search query"),
         ("limit" = Option<i32>, Query, description = "Maximum results"),
+        ("offset" = Option<i32>, Query, description = "Result offset for pagination"),
     ),
     responses(
-        (status = 200, description = "Search results", body = Vec<SearchHit>),
+        (status = 200, description = "Paginated search results", body = SearchResults),
         (status = 400, description = "Missing query parameter"),
     ),
     tag = "recipes"
@@ -113,11 +114,12 @@ async fn search_recipes_handler(
     }
 
     let limit = params.limit.unwrap_or(20).clamp(1, 100);
+    let offset = params.offset.unwrap_or(0).max(0);
 
-    match state.db.search(params.q.trim(), limit).await {
-        Ok(hits) => {
-            info!("search: query={} hits={}", params.q, hits.len());
-            (StatusCode::OK, serde_json::to_string(&hits).unwrap())
+    match state.db.search(params.q.trim(), limit, offset).await {
+        Ok(results) => {
+            info!("search: query={} total={}", params.q, results.total);
+            (StatusCode::OK, serde_json::to_string(&results).unwrap())
         }
         Err(e) => {
             warn!("search error: {}", e);

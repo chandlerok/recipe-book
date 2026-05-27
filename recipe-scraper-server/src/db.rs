@@ -8,13 +8,13 @@ use sqlx::postgres::PgPoolOptions;
 use tokio::sync::RwLock;
 use tracing::info;
 
-use crate::models::{QueueStats, Recipe, SearchHit};
+use crate::models::{QueueStats, Recipe, SearchHit, SearchResults};
 use crate::scraper::ScrapedRecipe;
 
 pub const CRAWL_LOCK_ID: i64 = 42;
 
 struct CacheEntry {
-    hits: Vec<SearchHit>,
+    hits: SearchResults,
     at: Instant,
 }
 
@@ -320,12 +320,22 @@ impl RecipeDb {
         }))
     }
 
-    pub async fn search(&self, query: &str, limit: i32) -> Result<Vec<SearchHit>> {
+    pub async fn search(
+        &self,
+        query: &str,
+        limit: i32,
+        offset: i32,
+    ) -> Result<SearchResults> {
         if query.len() < 2 {
-            return Ok(Vec::new());
+            return Ok(SearchResults {
+                hits: Vec::new(),
+                total: 0,
+                offset,
+                limit,
+            });
         }
 
-        let cache_key = format!("{}:{}", query, limit);
+        let cache_key = format!("{}:{}:{}", query, limit, offset);
         {
             let cache = self.cache.read().await;
             if let Some(entry) = cache.get(&cache_key)
@@ -359,20 +369,24 @@ impl RecipeDb {
                    + CASE WHEN r.title ILIKE $3 THEN 0.3 ELSE 0 END
                    + CASE WHEN r.ingredients ILIKE $3 THEN 0.1 ELSE 0 END
                    + GREATEST(word_similarity($1, COALESCE(r.title, '')), 0) * 0.4
-                   + GREATEST(word_similarity($1, COALESCE(r.ingredients, '')), 0) * 0.15 AS score
+                   + GREATEST(word_similarity($1, COALESCE(r.ingredients, '')), 0) * 0.15 AS score,
+                   COUNT(*) OVER() AS total
             FROM recipes r
             JOIN matched m ON r.url = m.url
             ORDER BY score DESC
-            LIMIT $2
+            LIMIT $2 OFFSET $4
             "#,
         )
         .bind(query)
         .bind(limit)
         .bind(&pattern)
+        .bind(offset)
         .fetch_all(&mut *tx)
         .await?;
 
         tx.commit().await?;
+
+        let total: i64 = rows.first().map(|r| r.get("total")).unwrap_or(0);
 
         let hits: Vec<SearchHit> = rows
             .into_iter()
@@ -400,19 +414,23 @@ impl RecipeDb {
             })
             .collect();
 
+        let results = SearchResults {
+            hits: hits.clone(),
+            total,
+            offset,
+            limit,
+        };
+
         {
             let mut cache = self.cache.write().await;
             cache.retain(|_, e| e.at.elapsed() < Duration::from_secs(30));
             cache.insert(
                 cache_key,
-                CacheEntry {
-                    hits: hits.clone(),
-                    at: Instant::now(),
-                },
+                CacheEntry { hits: results.clone(), at: Instant::now() },
             );
         }
 
-        Ok(hits)
+        Ok(results)
     }
 
     pub async fn queue_stats(&self) -> Result<QueueStats> {
@@ -688,9 +706,10 @@ mod tests {
         };
         db.save_recipe(&recipe).await.unwrap();
 
-        let results = db.search("chicken", 20).await.unwrap();
-        assert!(!results.is_empty());
-        assert_eq!(results[0].recipe.title, "Chicken Parmesan");
+        let results = db.search("chicken", 20, 0).await.unwrap();
+        assert!(!results.hits.is_empty());
+        assert_eq!(results.hits[0].recipe.title, "Chicken Parmesan");
+        assert!(results.total > 0);
     }
 
     #[tokio::test]
@@ -703,8 +722,9 @@ mod tests {
         };
         db.save_recipe(&recipe).await.unwrap();
 
-        let results = db.search("zucchini", 20).await.unwrap();
-        assert!(results.is_empty());
+        let results = db.search("zucchini", 20, 0).await.unwrap();
+        assert!(results.hits.is_empty());
+        assert_eq!(results.total, 0);
     }
 
     #[tokio::test]
@@ -720,8 +740,9 @@ mod tests {
             db.save_recipe(&recipe).await.unwrap();
         }
 
-        let results = db.search("chicken", 2).await.unwrap();
-        assert_eq!(results.len(), 2);
+        let results = db.search("chicken", 2, 0).await.unwrap();
+        assert_eq!(results.hits.len(), 2);
+        assert_eq!(results.total, 5);
     }
 
     #[tokio::test]
@@ -734,7 +755,7 @@ mod tests {
             ..sample_recipe("https://example.com/test")
         };
         db.save_recipe(&alpha).await.unwrap();
-        assert_eq!(db.search("alpha", 20).await.unwrap().len(), 1);
+        assert_eq!(db.search("alpha", 20, 0).await.unwrap().hits.len(), 1);
 
         let beta = ScrapedRecipe {
             url: "https://example.com/beta".to_string(),
@@ -742,8 +763,8 @@ mod tests {
             ..sample_recipe("https://example.com/test")
         };
         db.save_recipe(&beta).await.unwrap();
-        assert_eq!(db.search("beta", 20).await.unwrap().len(), 1);
-        assert_eq!(db.search("alpha", 20).await.unwrap().len(), 1);
+        assert_eq!(db.search("beta", 20, 0).await.unwrap().hits.len(), 1);
+        assert_eq!(db.search("alpha", 20, 0).await.unwrap().hits.len(), 1);
     }
 
     #[tokio::test]
@@ -756,12 +777,12 @@ mod tests {
         };
         db.save_recipe(&recipe).await.unwrap();
 
-        let results = db.search("chick", 20).await.unwrap();
+        let results = db.search("chick", 20, 0).await.unwrap();
         assert!(
-            !results.is_empty(),
+            !results.hits.is_empty(),
             "partial word 'chick' should match 'Chicken'"
         );
-        assert_eq!(results[0].recipe.title, "Chicken Parmesan");
+        assert_eq!(results.hits[0].recipe.title, "Chicken Parmesan");
     }
 
     #[tokio::test]
@@ -774,12 +795,12 @@ mod tests {
         };
         db.save_recipe(&recipe).await.unwrap();
 
-        let results = db.search("chikcen", 20).await.unwrap();
+        let results = db.search("chikcen", 20, 0).await.unwrap();
         assert!(
-            !results.is_empty(),
+            !results.hits.is_empty(),
             "misspelled 'chikcen' should match 'Chicken' via trigram similarity"
         );
-        assert_eq!(results[0].recipe.title, "Chicken Parmesan");
+        assert_eq!(results.hits[0].recipe.title, "Chicken Parmesan");
     }
 
     #[tokio::test]

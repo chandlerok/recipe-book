@@ -25,10 +25,19 @@ pub struct QueueStats {
     pub error: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SearchResults {
+    pub hits: Vec<SearchHit>,
+    pub total: i64,
+    pub offset: i32,
+    pub limit: i32,
+}
+
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct SearchParams {
     pub q: String,
     pub limit: Option<i32>,
+    pub offset: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
