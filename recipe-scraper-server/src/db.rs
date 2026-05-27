@@ -11,6 +11,8 @@ use tracing::info;
 use crate::models::{QueueStats, Recipe, SearchHit};
 use crate::scraper::ScrapedRecipe;
 
+pub const CRAWL_LOCK_ID: i64 = 42;
+
 struct CacheEntry {
     hits: Vec<SearchHit>,
     at: Instant,
@@ -442,14 +444,16 @@ impl RecipeDb {
     }
 
     pub async fn try_acquire_crawl_lock(&self) -> Result<bool> {
-        let row: (bool,) = sqlx::query_as("SELECT pg_try_advisory_lock(42)")
+        let row: (bool,) = sqlx::query_as("SELECT pg_try_advisory_lock($1)")
+            .bind(CRAWL_LOCK_ID)
             .fetch_one(&self.pool)
             .await?;
         Ok(row.0)
     }
 
     pub async fn release_crawl_lock(&self) -> Result<()> {
-        sqlx::query("SELECT pg_advisory_unlock(42)")
+        sqlx::query("SELECT pg_advisory_unlock($1)")
+            .bind(CRAWL_LOCK_ID)
             .execute(&self.pool)
             .await?;
         Ok(())
