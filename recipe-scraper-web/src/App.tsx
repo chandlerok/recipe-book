@@ -1,4 +1,4 @@
-import { createSignal, createResource, createMemo, Show } from "solid-js";
+import { createSignal, createResource, Show } from "solid-js";
 
 interface Recipe {
   url: string;
@@ -21,18 +21,13 @@ interface SearchResults {
   limit: number;
 }
 
-interface SearchParams {
-  q: string;
-  offset: number;
-}
-
 async function searchRecipes(
-  params: () => SearchParams | undefined,
+  q: string,
+  offset: number,
 ): Promise<SearchResults | undefined> {
-  const p = params();
-  if (!p || !p.q.trim()) return undefined;
+  if (!q.trim()) return undefined;
   const res = await fetch(
-    `/api/recipes/search?q=${encodeURIComponent(p.q)}&limit=20&offset=${p.offset}`,
+    `/api/recipes/search?q=${encodeURIComponent(q)}&limit=20&offset=${offset}`,
   );
   if (!res.ok) return undefined;
   return res.json();
@@ -42,21 +37,17 @@ const App = () => {
   const [query, setQuery] = createSignal("");
   const [offset, setOffset] = createSignal(0);
 
-  const searchParams = createMemo(() => {
-    const q = query().trim();
-    if (!q) return undefined;
-    return { q, offset: offset() };
-  });
-
-  const [results] = createResource(searchParams, searchRecipes, {
-    deferStream: true,
-  });
-
-  const hits = createMemo(() => results()?.hits ?? []);
-  const total = createMemo(() => results()?.total ?? 0);
-  const limit = 20;
-  const pageCount = createMemo(() => Math.ceil(total() / limit) || 1);
-  const currentPage = createMemo(() => Math.floor(offset() / limit) + 1);
+  const [results] = createResource(
+    () => {
+      const q = query().trim();
+      if (!q) return undefined;
+      return `${q}:${offset()}`;
+    },
+    async (key) => {
+      const [q, offsetStr] = key.split(":");
+      return searchRecipes(q, Number(offsetStr));
+    },
+  );
 
   const onInput = (e: Event) => {
     setQuery((e.target as HTMLInputElement).value);
@@ -64,10 +55,16 @@ const App = () => {
   };
 
   const goToPage = (page: number) => {
-    setOffset((page - 1) * limit);
+    setOffset((page - 1) * 20);
   };
 
   const [selected, setSelected] = createSignal<Recipe | null>(null);
+
+  const data = () => results();
+  const hits = () => data()?.hits ?? [];
+  const total = () => data()?.total ?? 0;
+  const pageCount = () => Math.ceil(total() / 20) || 1;
+  const currentPage = () => Math.floor(offset() / 20) + 1;
 
   return (
     <div style="max-width: 640px; margin: 0 auto; padding: 2rem 1rem; font-family: system-ui, sans-serif;">
