@@ -2,7 +2,7 @@
 FROM oven/bun:1 AS frontend
 WORKDIR /build
 COPY recipe-scraper-web/package.json recipe-scraper-web/bun.lock ./
-RUN bun install --frozen-lockfile
+RUN bun install
 COPY recipe-scraper-web/ .
 RUN bun run build
 
