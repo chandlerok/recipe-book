@@ -7,7 +7,7 @@ COPY recipe-scraper-web/ .
 RUN bun run build
 
 # Stage 2: Build server
-FROM rust:1.85 AS builder
+FROM rust:latest AS builder
 RUN apt-get update && apt-get install -y \
   cmake \
   pkg-config \
