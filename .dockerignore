@@ -1,0 +1,17 @@
+.git
+.gitignore
+.agents
+.mise
+mise.toml
+AGENTS.md
+README.md
+target
+node_modules
+dist
+recipe-scraper-py
+recipe-crawler-rs
+recipe-scraper-rs
+**/*.md
+**/.*
+!.env
+.env*

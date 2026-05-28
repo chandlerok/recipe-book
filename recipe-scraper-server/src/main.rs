@@ -12,19 +12,19 @@ mod server;
 #[derive(Parser)]
 #[command(name = "recipe-scraper-server")]
 struct Cli {
-    #[arg(long, default_value = "127.0.0.1")]
+    #[arg(long, env = "HOST", default_value = "127.0.0.1")]
     host: String,
 
-    #[arg(long, default_value = "3000")]
+    #[arg(long, env = "PORT", default_value = "3000")]
     port: u16,
 
-    #[arg(long, default_value = "postgresql:///recipe_book")]
+    #[arg(long, env = "PG_DSN", default_value = "postgresql:///recipe_book")]
     pg_dsn: String,
 
-    #[arg(long, default_value = "5")]
+    #[arg(long, env = "WORKERS", default_value = "5")]
     workers: usize,
 
-    #[arg(long, default_value = "../recipe-scraper-web/dist")]
+    #[arg(long, env = "WEB_DIST", default_value = "../recipe-scraper-web/dist")]
     web_dist: String,
 }
 
