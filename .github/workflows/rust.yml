@@ -17,6 +17,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build
-      run: cd recipe-scraper-server && cargo build --verbose
+      run: mise build-server
     - name: Run tests
-      run: cargo test --verbose
+      run: mise test-server -- --verbose
