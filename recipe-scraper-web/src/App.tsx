@@ -237,7 +237,7 @@ const App = () => {
             style={`position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; pointer-events: none;`}
           >
             <div
-              style={`width: min(540px, calc(100vw - 32px)); max-height: 85vh; background: ${COLORS.bg}; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); padding: 24px; box-sizing: border-box; overflow-y: auto; pointer-events: auto; animation: modal-enter 0.2s ease; transform: scale(${isClosing() ? 0.95 : 1}); opacity: ${isClosing() ? 0 : 1}; transition: transform 0.2s ease, opacity 0.2s ease;`}
+              style={`width: min(540px, calc(100vw - 32px)); max-height: 85vh; background: ${COLORS.bg}; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); padding: 24px; box-sizing: border-box; overflow-y: auto; overflow-x: hidden; pointer-events: auto; animation: modal-enter 0.2s ease; transform: scale(${isClosing() ? 0.95 : 1}); opacity: ${isClosing() ? 0 : 1}; transition: transform 0.2s ease, opacity 0.2s ease;`}
             >
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                 <h2
@@ -285,7 +285,7 @@ const App = () => {
                 Ingredients
               </h3>
               <ul
-                style={`padding-left: 20px; margin: 0 0 24px; font-family: ${FONTS.body}; font-size: 14px; color: ${COLORS.textMuted}; line-height: 1.8;`}
+                style={`padding-left: 20px; margin: 0 0 24px; font-family: ${FONTS.body}; font-size: 14px; color: ${COLORS.textMuted}; line-height: 1.8; overflow-wrap: break-word;`}
               >
                 {recipe.ingredients.map((ing) => (
                   <li>{ing}</li>
@@ -298,7 +298,7 @@ const App = () => {
                 Instructions
               </h3>
               <ol
-                style={`padding-left: 20px; margin: 0 0 24px; font-family: ${FONTS.body}; font-size: 14px; color: ${COLORS.textMuted}; line-height: 1.8;`}
+                style={`padding-left: 20px; margin: 0 0 24px; font-family: ${FONTS.body}; font-size: 14px; color: ${COLORS.textMuted}; line-height: 1.8; overflow-wrap: break-word;`}
               >
                 {recipe.instructions.map((step) => (
                   <li style="margin-bottom: 4px;">{step}</li>
