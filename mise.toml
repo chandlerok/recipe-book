@@ -1,6 +1,5 @@
 [tools]
 "aqua:watchexec/cargo-watch" = "latest"
 bun = "latest"
-"npm:@dokploy/cli" = "latest"
 podman = "latest"
 rust = "latest"
