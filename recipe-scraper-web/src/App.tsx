@@ -221,96 +221,99 @@ const App = () => {
       </Show>
 
       <style>{`
-        @keyframes panel-slide { from { transform: translateX(100%); } to { transform: translateX(0); } }
-        @keyframes panel-fade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes modal-enter { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
       `}</style>
 
       <Show when={panelRevealed()}>
         <div
           onClick={() => setSelected(null)}
-          style={`position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 998; animation: panel-fade 0.15s ease; opacity: ${isClosing() ? 0 : 1}; transition: opacity 0.2s ease;`}
+          style={`position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 998; opacity: ${isClosing() ? 0 : 1}; transition: opacity 0.2s ease;`}
         />
       </Show>
 
       <Show when={animatingRecipe()} keyed>
         {(recipe) => (
           <div
-            style={`position: fixed; top: 0; right: 0; bottom: 0; width: min(480px, 100vw); background: ${COLORS.bg}; z-index: 999; overflow-y: auto; box-shadow: -4px 0 12px rgba(0,0,0,0.2); padding: 24px; box-sizing: border-box; animation: panel-slide 0.2s ease; transform: ${isClosing() ? "translateX(100%)" : "translateX(0)"}; transition: transform 0.2s ease;`}
+            style={`position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; pointer-events: none;`}
           >
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-              <h2
-                style={`margin: 0; font-family: ${FONTS.title}; font-size: 18px; font-weight: 400; color: ${COLORS.accentSecondary}; line-height: 1.3;`}
-              >
-                {recipe.title}
-              </h2>
-              <button
-                onClick={() => setSelected(null)}
-                style={`background: none; border: none; font-family: ${FONTS.mono}; font-size: 20px; cursor: pointer; padding: 0; line-height: 1; color: ${COLORS.accent};`}
-              >
-                ✕
-              </button>
-            </div>
-
-            {recipe.image ? (
-              <img
-                src={recipe.image}
-                alt={recipe.title}
-                style={`width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 20px; background: ${COLORS.surface}; border: 1px solid ${COLORS.border}; box-shadow: 4px 4px 4px rgba(0,0,0,0.2);`}
-              />
-            ) : (
-              <div
-                style={`width: 100%; height: 200px; border-radius: 8px; margin-bottom: 20px; background: ${COLORS.surface}; border: 1px solid ${COLORS.border}; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center;`}
-              >
-                <span
-                  style={`font-family: ${FONTS.mono}; font-size: 14px; color: #555;`}
+            <div
+              style={`width: min(540px, calc(100vw - 32px)); max-height: 85vh; background: ${COLORS.bg}; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); padding: 24px; box-sizing: border-box; overflow-y: auto; pointer-events: auto; animation: modal-enter 0.2s ease; transform: scale(${isClosing() ? 0.95 : 1}); opacity: ${isClosing() ? 0 : 1}; transition: transform 0.2s ease, opacity 0.2s ease;`}
+            >
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h2
+                  style={`margin: 0; font-family: ${FONTS.title}; font-size: 18px; font-weight: 400; color: ${COLORS.accentSecondary}; line-height: 1.3;`}
                 >
-                  Image placeholder
-                </span>
+                  {recipe.title}
+                </h2>
+                <button
+                  onClick={() => setSelected(null)}
+                  style={`background: none; border: none; font-family: ${FONTS.mono}; font-size: 20px; cursor: pointer; padding: 0; line-height: 1; color: ${COLORS.accent};`}
+                >
+                  ✕
+                </button>
               </div>
-            )}
 
-            {recipe.total_time > 0 && (
-              <p
-                style={`font-family: ${FONTS.mono}; font-size: 13px; color: ${COLORS.textMuted}; margin: 0 0 24px;`}
+              {recipe.image ? (
+                <img
+                  src={recipe.image}
+                  alt={recipe.title}
+                  style={`width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 20px; background: ${COLORS.surface}; border: 1px solid ${COLORS.border}; box-shadow: 4px 4px 4px rgba(0,0,0,0.2);`}
+                />
+              ) : (
+                <div
+                  style={`width: 100%; height: 200px; border-radius: 8px; margin-bottom: 20px; background: ${COLORS.surface}; border: 1px solid ${COLORS.border}; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center;`}
+                >
+                  <span
+                    style={`font-family: ${FONTS.mono}; font-size: 14px; color: #555;`}
+                  >
+                    Image placeholder
+                  </span>
+                </div>
+              )}
+
+              {recipe.total_time > 0 && (
+                <p
+                  style={`font-family: ${FONTS.mono}; font-size: 13px; color: ${COLORS.textMuted}; margin: 0 0 24px;`}
+                >
+                  Total time: {recipe.total_time} min
+                </p>
+              )}
+
+              <h3
+                style={`font-family: ${FONTS.mono}; font-weight: 600; font-size: 16px; color: ${COLORS.textHeader}; margin: 0 0 8px;`}
               >
-                Total time: {recipe.total_time} min
-              </p>
-            )}
+                Ingredients
+              </h3>
+              <ul
+                style={`padding-left: 20px; margin: 0 0 24px; font-family: ${FONTS.body}; font-size: 14px; color: ${COLORS.textMuted}; line-height: 1.8;`}
+              >
+                {recipe.ingredients.map((ing) => (
+                  <li>{ing}</li>
+                ))}
+              </ul>
 
-            <h3
-              style={`font-family: ${FONTS.mono}; font-weight: 600; font-size: 16px; color: ${COLORS.textHeader}; margin: 0 0 8px;`}
-            >
-              Ingredients
-            </h3>
-            <ul
-              style={`padding-left: 20px; margin: 0 0 24px; font-family: ${FONTS.body}; font-size: 14px; color: ${COLORS.textMuted}; line-height: 1.8;`}
-            >
-              {recipe.ingredients.map((ing) => (
-                <li>{ing}</li>
-              ))}
-            </ul>
+              <h3
+                style={`font-family: ${FONTS.mono}; font-weight: 600; font-size: 16px; color: ${COLORS.textHeader}; margin: 0 0 8px;`}
+              >
+                Instructions
+              </h3>
+              <ol
+                style={`padding-left: 20px; margin: 0 0 24px; font-family: ${FONTS.body}; font-size: 14px; color: ${COLORS.textMuted}; line-height: 1.8;`}
+              >
+                {recipe.instructions.map((step) => (
+                  <li style="margin-bottom: 4px;">{step}</li>
+                ))}
+              </ol>
 
-            <h3
-              style={`font-family: ${FONTS.mono}; font-weight: 600; font-size: 16px; color: ${COLORS.textHeader}; margin: 0 0 8px;`}
-            >
-              Instructions
-            </h3>
-            <ol
-              style={`padding-left: 20px; margin: 0 0 24px; font-family: ${FONTS.body}; font-size: 14px; color: ${COLORS.textMuted}; line-height: 1.8;`}
-            >
-              {recipe.instructions.map((step) => (
-                <li style="margin-bottom: 4px;">{step}</li>
-              ))}
-            </ol>
-
-            <a
-              href={recipe.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={`display: inline-block; font-family: ${FONTS.title}; font-size: 13px; color: ${COLORS.accentSecondary}; text-decoration: none;`}
-            >
-              View original recipe ↗
-            </a>
+              <a
+                href={recipe.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={`display: inline-block; font-family: ${FONTS.title}; font-size: 13px; color: ${COLORS.accentSecondary}; text-decoration: none;`}
+              >
+                View original recipe ↗
+              </a>
+            </div>
           </div>
         )}
       </Show>
