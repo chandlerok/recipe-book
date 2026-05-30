@@ -33,6 +33,32 @@ async function searchRecipes(
   return res.json();
 }
 
+const COLORS = {
+  bg: "#15101D",
+  surface: "#1E1524",
+  input: "#291F38",
+  border: "#0D0B12",
+  borderBtn: "#100C16",
+  accent: "#D50B0B",
+  accentSecondary: "#C867B9",
+  textMuted: "#666666",
+  textInfo: "#555555",
+  textHeader: "#888888",
+  textPlaceholder: "#999999",
+} as const;
+
+const FONTS = {
+  display: "'Zen Dots'",
+  title: "'Michroma'",
+  mono: "'Fira Code'",
+  heading: "'Inter Tight'",
+  body: "'Coda'",
+} as const;
+
+const cardStyle = `background: ${COLORS.surface}; border: 1px solid ${COLORS.border}; border-radius: 8px; box-shadow: 4px 4px 4px rgba(0,0,0,0.2);`;
+const btnStyle = `background: ${COLORS.surface}; border: 1px solid ${COLORS.borderBtn}; border-radius: 4px; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); cursor: pointer; font-family: ${FONTS.title}; font-size: 10px; color: ${COLORS.accent}; padding: 6px 14px;`;
+const btnDisabled = `${btnStyle} opacity: 0.5; cursor: default;`;
+
 const App = () => {
   const [query, setQuery] = createSignal("");
   const [offset, setOffset] = createSignal(0);
@@ -67,23 +93,35 @@ const App = () => {
   const currentPage = () => Math.floor(offset() / 20) + 1;
 
   return (
-    <div style="max-width: 640px; margin: 0 auto; padding: 2rem 1rem; font-family: system-ui, sans-serif;">
-      <h1 style="font-size: 1.5rem; margin-bottom: 1rem;">Recipe Search</h1>
+    <div
+      style={`max-width: 640px; margin: 0 auto; padding: 2rem 1rem; background: ${COLORS.bg}; min-height: 100vh;`}
+    >
+      <h1
+        style={`font-family: ${FONTS.display}; font-size: 24px; font-weight: 400; color: ${COLORS.accent}; margin: 0 0 16px;`}
+      >
+        Recipe Search
+      </h1>
 
       <input
         type="text"
         placeholder="Search recipes..."
         value={query()}
         onInput={onInput}
-        style="width: 100%; padding: 0.75rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;"
+        style={`width: 100%; padding: 12px; font-family: ${FONTS.mono}; font-size: 16px; background: ${COLORS.input}; border: 1px solid ${COLORS.border}; border-radius: 8px; box-sizing: border-box; color: #fff; outline: none; box-shadow: 4px 4px 4px rgba(0,0,0,0.2);`}
       />
 
       <Show when={hits().length > 0}>
-        <ul style="list-style: none; padding: 0; margin-top: 1rem;">
+        <p
+          style={`font-family: ${FONTS.heading}; font-weight: 600; font-size: 14px; color: ${COLORS.textHeader}; margin: 16px 0 4px;`}
+        >
+          {total()} recipes found
+        </p>
+
+        <div style="display: flex; flex-direction: column; gap: 16px;">
           {hits().map((hit) => (
-            <li
+            <div
               onClick={() => setSelected(hit.recipe)}
-              style="padding: 0.75rem; border-bottom: 1px solid #eee; display: flex; gap: 1rem; cursor: pointer;"
+              style={`${cardStyle} display: flex; gap: 16px; padding: 0; cursor: pointer;`}
             >
               {hit.recipe.image && (
                 <img
@@ -92,35 +130,43 @@ const App = () => {
                   style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; flex-shrink: 0;"
                 />
               )}
-              <div>
-                <span style="font-weight: 600; color: #1a73e8;">
+              <div style="padding: 16px 0;">
+                <span
+                  style={`font-family: ${FONTS.title}; font-size: 16px; font-weight: 400; color: ${COLORS.accentSecondary};`}
+                >
                   {hit.recipe.title}
                 </span>
                 {hit.recipe.total_time > 0 && (
-                  <p style="margin: 0.25rem 0 0; font-size: 0.85rem; color: #666;">
+                  <p
+                    style={`margin: 8px 0 0; font-family: ${FONTS.mono}; font-size: 13.6px; color: ${COLORS.textMuted};`}
+                  >
                     {hit.recipe.total_time} min
                   </p>
                 )}
               </div>
-            </li>
+            </div>
           ))}
-        </ul>
+        </div>
 
-        <div style="display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1rem;">
+        <div
+          style={`display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 16px;`}
+        >
           <button
             onClick={() => goToPage(currentPage() - 1)}
             disabled={currentPage() <= 1}
-            style="padding: 0.4rem 0.8rem; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; font-size: 0.9rem;"
+            style={currentPage() <= 1 ? btnDisabled : btnStyle}
           >
             ◀ Prev
           </button>
-          <span style="font-size: 0.9rem; color: #555;">
+          <span
+            style={`font-family: ${FONTS.mono}; font-size: 14.4px; color: ${COLORS.textInfo};`}
+          >
             Page {currentPage()} of {pageCount()} ({total()} results)
           </span>
           <button
             onClick={() => goToPage(currentPage() + 1)}
             disabled={currentPage() >= pageCount()}
-            style="padding: 0.4rem 0.8rem; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; font-size: 0.9rem;"
+            style={currentPage() >= pageCount() ? btnDisabled : btnStyle}
           >
             Next ▶
           </button>
@@ -128,9 +174,20 @@ const App = () => {
       </Show>
 
       <Show when={query().trim() && hits().length === 0 && !results.loading}>
-        <p style="color: #888; text-align: center; margin-top: 2rem;">
-          No recipes found
-        </p>
+        <div
+          style={`display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 64px;`}
+        >
+          <p
+            style={`font-family: ${FONTS.title}; font-size: 18px; color: ${COLORS.accentSecondary}; margin: 0 0 8px;`}
+          >
+            No recipes found
+          </p>
+          <p
+            style={`font-family: ${FONTS.mono}; font-size: 14px; color: ${COLORS.textMuted}; margin: 0;`}
+          >
+            Try adjusting your search term
+          </p>
+        </div>
       </Show>
 
       <Show when={selected()} keyed>
@@ -138,50 +195,74 @@ const App = () => {
           <>
             <div
               onClick={() => setSelected(null)}
-              style="position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 998;"
+              style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 998;"
             />
-            <div style="position: fixed; top: 0; right: 0; bottom: 0; width: min(480px, 100vw); background: #fff; z-index: 999; overflow-y: auto; box-shadow: -4px 0 12px rgba(0,0,0,0.15); padding: 1.5rem; box-sizing: border-box; font-family: system-ui, sans-serif;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h2 style="margin: 0; font-size: 1.25rem; line-height: 1.3;">
+            <div
+              style={`position: fixed; top: 0; right: 0; bottom: 0; width: min(480px, 100vw); background: ${COLORS.bg}; z-index: 999; overflow-y: auto; box-shadow: -4px 0 12px rgba(0,0,0,0.2); padding: 24px; box-sizing: border-box;`}
+            >
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h2
+                  style={`margin: 0; font-family: ${FONTS.title}; font-size: 18px; font-weight: 400; color: ${COLORS.accentSecondary}; line-height: 1.3;`}
+                >
                   {recipe.title}
                 </h2>
                 <button
                   onClick={() => setSelected(null)}
-                  style="background: none; border: none; font-size: 1.5rem; cursor: pointer; padding: 0; line-height: 1; color: #888;"
+                  style={`background: none; border: none; font-family: ${FONTS.mono}; font-size: 20px; cursor: pointer; padding: 0; line-height: 1; color: ${COLORS.accent};`}
                 >
                   ✕
                 </button>
               </div>
 
-              {recipe.image && (
+              {recipe.image ? (
                 <img
                   src={recipe.image}
                   alt={recipe.title}
-                  style="width: 100%; max-height: 300px; object-fit: cover; border-radius: 8px; margin-bottom: 1rem;"
+                  style={`width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 20px; background: ${COLORS.surface}; border: 1px solid ${COLORS.border}; box-shadow: 4px 4px 4px rgba(0,0,0,0.2);`}
                 />
+              ) : (
+                <div
+                  style={`width: 100%; height: 200px; border-radius: 8px; margin-bottom: 20px; background: ${COLORS.surface}; border: 1px solid ${COLORS.border}; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center;`}
+                >
+                  <span
+                    style={`font-family: ${FONTS.mono}; font-size: 14px; color: #555;`}
+                  >
+                    Image placeholder
+                  </span>
+                </div>
               )}
 
               {recipe.total_time > 0 && (
-                <p style="font-size: 0.9rem; color: #666; margin-bottom: 1rem;">
+                <p
+                  style={`font-family: ${FONTS.mono}; font-size: 13px; color: ${COLORS.textMuted}; margin: 0 0 24px;`}
+                >
                   Total time: {recipe.total_time} min
                 </p>
               )}
 
-              <h3 style="font-size: 1rem; margin-bottom: 0.5rem;">
+              <h3
+                style={`font-family: ${FONTS.mono}; font-weight: 600; font-size: 16px; color: ${COLORS.textHeader}; margin: 0 0 8px;`}
+              >
                 Ingredients
               </h3>
-              <ul style="padding-left: 1.25rem; margin-bottom: 1.25rem; line-height: 1.6;">
+              <ul
+                style={`padding-left: 20px; margin: 0 0 24px; font-family: ${FONTS.body}; font-size: 14px; color: ${COLORS.textMuted}; line-height: 1.8;`}
+              >
                 {recipe.ingredients.map((ing) => (
                   <li>{ing}</li>
                 ))}
               </ul>
 
-              <h3 style="font-size: 1rem; margin-bottom: 0.5rem;">
+              <h3
+                style={`font-family: ${FONTS.mono}; font-weight: 600; font-size: 16px; color: ${COLORS.textHeader}; margin: 0 0 8px;`}
+              >
                 Instructions
               </h3>
-              <ol style="padding-left: 1.25rem; margin-bottom: 1.25rem; line-height: 1.6;">
+              <ol
+                style={`padding-left: 20px; margin: 0 0 24px; font-family: ${FONTS.body}; font-size: 14px; color: ${COLORS.textMuted}; line-height: 1.8;`}
+              >
                 {recipe.instructions.map((step) => (
-                  <li style="margin-bottom: 0.5rem;">{step}</li>
+                  <li style="margin-bottom: 4px;">{step}</li>
                 ))}
               </ol>
 
@@ -189,7 +270,7 @@ const App = () => {
                 href={recipe.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                style="display: inline-block; margin-top: 0.5rem; color: #1a73e8; font-size: 0.9rem;"
+                style={`display: inline-block; font-family: ${FONTS.title}; font-size: 13px; color: ${COLORS.accentSecondary}; text-decoration: none;`}
               >
                 View original recipe ↗
               </a>
