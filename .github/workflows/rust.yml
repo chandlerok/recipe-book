@@ -20,4 +20,4 @@ jobs:
     - name: Build
       run: mise build-server
     - name: Run tests
-      run: mise test-server -- --verbose
+      run: mise test-server -- --release -- --verbose
