@@ -140,7 +140,7 @@ const App = () => {
         style={`width: 100%; padding: 12px; font-family: ${FONTS.mono}; font-size: 16px; background: ${COLORS.input}; border: 1px solid ${COLORS.border}; border-radius: 8px; box-sizing: border-box; color: #fff; outline: none; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); flex-shrink: 0;`}
       />
 
-      <Show when={hits().length > 0}>
+      <Show when={hits().length > 0 && query().trim() !== ""}>
         <p
           style={`font-family: ${FONTS.heading}; font-weight: 600; font-size: 14px; color: ${COLORS.textHeader}; margin: 16px 0 4px;`}
         >
