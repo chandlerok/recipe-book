@@ -151,8 +151,19 @@ const App = () => {
   });
 
   createEffect(() => {
+    const c = C();
     const bg = isDark() ? "#15101D" : "#F5F0EB";
     document.body.style.background = bg;
+    document.body.style.setProperty("--sk-from", c.surface);
+    document.body.style.setProperty("--sk-card-border", c.border);
+    document.body.style.setProperty(
+      "--toggle-hover-bg",
+      isDark() ? "#291F38" : c.surface,
+    );
+    document.body.style.setProperty(
+      "--toggle-hover-border",
+      isDark() ? "#C867B9" : c.borderBtn,
+    );
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute("content", bg);
   });
@@ -190,8 +201,6 @@ const App = () => {
   };
 
   let searchInput!: HTMLInputElement;
-
-  const [showToggle, setShowToggle] = createSignal(false);
 
   const [selected, setSelected] = createSignal<Recipe | null>(null);
   const [animatingRecipe, setAnimatingRecipe] = createSignal<Recipe | null>(
@@ -478,6 +487,18 @@ const App = () => {
           opacity: 1;
         }
 
+        .theme-toggle-btn {
+          background: transparent;
+          border: 1px solid transparent;
+          box-shadow: none;
+          transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+        }
+        .theme-toggle-area:hover .theme-toggle-btn {
+          background: var(--toggle-hover-bg);
+          border-color: var(--toggle-hover-border);
+          box-shadow: 4px 4px 4px rgba(0,0,0,0.2);
+        }
+
         .pagination button:not(:disabled):hover {
           box-shadow: 0 0 0 1px rgba(200,103,185,0.35), 0 0 20px 8px rgba(200,103,185,0.08), 4px 4px 4px rgba(0,0,0,0.2) !important;
         }
@@ -628,13 +649,13 @@ const App = () => {
       </Show>
 
       <div
-        onMouseEnter={() => setShowToggle(true)}
-        onMouseLeave={() => setShowToggle(false)}
-        style={`position: fixed; top: 0; right: 0; width: 48px; height: 48px; z-index: 1000; display: flex; align-items: flex-start; justify-content: flex-end; padding: 8px;`}
+        class="theme-toggle-area"
+        style={`position: fixed; top: 0; right: 0; width: 48px; height: 48px; z-index: 1000; padding: 8px;`}
       >
         <button
           onClick={toggleTheme}
-          style={`width: 28px; height: 28px; border-radius: 6px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; background: ${showToggle() ? C().surface : "none"}; border: ${showToggle() ? `1px solid ${C().borderBtn}` : "none"}; box-shadow: ${showToggle() ? "4px 4px 4px rgba(0,0,0,0.2)" : "none"}; color: ${C().textMuted}; transition: background 0.15s ease, border 0.15s ease, box-shadow 0.15s ease;`}
+          class="theme-toggle-btn"
+          style={`width: 28px; height: 28px; border-radius: 6px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: ${C().textMuted};`}
         >
           <i class={isDark() ? "fas fa-sun" : "fas fa-moon"}></i>
         </button>
