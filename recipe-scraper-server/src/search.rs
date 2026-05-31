@@ -5,9 +5,8 @@ use tantivy::{
     Index, IndexReader, ReloadPolicy, Term,
     collector::{Count, TopDocs},
     doc,
-    query::{BooleanQuery, BoostQuery, Occur, PhraseQuery, Query, QueryParser, TermQuery},
+    query::{BooleanQuery, BoostQuery, Occur, PhraseQuery, Query, TermQuery},
     schema::*,
-    tokenizer::{LowerCaser, NgramTokenizer, TextAnalyzer},
 };
 use tracing::info;
 
@@ -236,16 +235,6 @@ impl RecipeIndex {
         let words: Vec<&str> = query_str.split_whitespace().collect();
         let mut clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
 
-<<<<<<< HEAD
-        // Filter using ngram fields so partial words like "chick" still match
-        // "chicken". The QueryParser with conjunction_by_default requires every
-        // query term to appear in at least one ngram field.
-        let ngram_fields = vec![self.title_ngram, self.ingredients_ngram];
-        let mut parser = QueryParser::for_index(&self.index, ngram_fields);
-        parser.set_conjunction_by_default();
-        if let Ok(parsed) = parser.parse_query(query_str) {
-            outer.push((Occur::Must, Box::new(parsed)));
-=======
         let ngram_tokens = query_ngrams(query_str);
 
         if ngram_tokens.is_empty() {
@@ -267,43 +256,23 @@ impl RecipeIndex {
                 ));
             }
             clauses.push((Occur::Must, Box::new(BooleanQuery::new(field_clauses))));
->>>>>>> 8d52035 (update ngram logic)
         }
 
         // Score-only boosts (don't affect filtering)
         if words.len() >= 2 {
-            // Phrase query in standard title field for exact consecutive word match
             let phrase_terms: Vec<(usize, Term)> = words
                 .iter()
                 .enumerate()
                 .map(|(i, w)| (i, Term::from_field_text(self.title, w)))
                 .collect();
             let phrase = PhraseQuery::new_with_offset_and_slop(phrase_terms, 1);
-<<<<<<< HEAD
-            outer.push((
-=======
             clauses.push((
->>>>>>> 8d52035 (update ngram logic)
                 Occur::Should,
                 Box::new(BoostQuery::new(Box::new(phrase), 5.0)),
             ));
         }
 
-<<<<<<< HEAD
-        // Publication boost
-        for pub_name in &["Bon Appétit", "NYT Cooking", "Epicurious"] {
-            let term = Term::from_field_text(self.publication, pub_name);
-            let term_query = TermQuery::new(term, IndexRecordOption::Basic);
-            outer.push((
-                Occur::Should,
-                Box::new(BoostQuery::new(Box::new(term_query), 0.01)),
-            ));
-        }
-
-        let bool_query = BooleanQuery::new(outer);
-=======
         let bool_query = BooleanQuery::new(clauses);
->>>>>>> 8d52035 (update ngram logic)
 
         let (top_docs, total) = match searcher.search(
             &bool_query,
