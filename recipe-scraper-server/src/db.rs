@@ -41,118 +41,14 @@ impl RecipeDb {
             .await
             .context("failed to connect to PostgreSQL")?;
 
+        sqlx::migrate!().run(&pool).await?;
+        info!("database initialized");
+
         let db = Self {
             pool,
             cache: Arc::new(RwLock::new(HashMap::new())),
         };
-        db.init_db().await?;
         Ok(db)
-    }
-
-    async fn init_db(&self) -> Result<()> {
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS scrape_queue (
-                id SERIAL PRIMARY KEY,
-                url VARCHAR NOT NULL UNIQUE,
-                status VARCHAR NOT NULL DEFAULT 'pending',
-                error_message VARCHAR,
-                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                scraped_at TIMESTAMP
-            )
-            "#,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS recipes (
-                url VARCHAR PRIMARY KEY,
-                title TEXT,
-                total_time INTEGER,
-                ingredients TEXT,
-                instructions TEXT,
-                image TEXT,
-                scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            "#,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        sqlx::query("ALTER TABLE recipes ADD COLUMN IF NOT EXISTS search_vector tsvector")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_recipes_search ON recipes USING GIN(search_vector)",
-        )
-        .execute(&self.pool)
-        .await?;
-
-        sqlx::query("CREATE EXTENSION IF NOT EXISTS pg_trgm")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query(
-            r#"CREATE INDEX IF NOT EXISTS idx_recipes_title_trgm
-               ON recipes USING GIN (title gin_trgm_ops)"#,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        sqlx::query(
-            r#"CREATE INDEX IF NOT EXISTS idx_recipes_ingredients_trgm
-               ON recipes USING GIN (ingredients gin_trgm_ops)"#,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        sqlx::query(
-            r#"
-            CREATE OR REPLACE FUNCTION recipes_search_update() RETURNS trigger AS $$
-            BEGIN
-                NEW.search_vector :=
-                    setweight(to_tsvector('english', COALESCE(NEW.title, '')), 'A') ||
-                    setweight(to_tsvector('english', COALESCE(NEW.ingredients, '')), 'B') ||
-                    setweight(to_tsvector('english', COALESCE(NEW.instructions, '')), 'C');
-                RETURN NEW;
-            END;
-            $$ LANGUAGE plpgsql
-            "#,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        sqlx::query("DROP TRIGGER IF EXISTS trg_recipes_search ON recipes")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query(
-            r#"
-            CREATE TRIGGER trg_recipes_search
-                BEFORE INSERT OR UPDATE ON recipes
-                FOR EACH ROW EXECUTE FUNCTION recipes_search_update()
-            "#,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        sqlx::query(
-            r#"
-            UPDATE recipes SET search_vector =
-                setweight(to_tsvector('english', COALESCE(title, '')), 'A') ||
-                setweight(to_tsvector('english', COALESCE(ingredients, '')), 'B') ||
-                setweight(to_tsvector('english', COALESCE(instructions, '')), 'C')
-            WHERE search_vector IS NULL
-            "#,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        info!("database initialized");
-        Ok(())
     }
 
     pub async fn enqueue_url(&self, url: &str) -> Result<String> {
@@ -342,8 +238,8 @@ impl RecipeDb {
         let pattern = format!("%{}%", query);
         let mut tx = self.pool.begin().await?;
 
-        sqlx::query("SELECT set_limit(0.18)")
-            .execute(&mut *tx)
+        sqlx::query!("SELECT set_limit(0.18)")
+            .fetch_optional(&mut *tx)
             .await?;
 
         let rows = sqlx::query!(
@@ -393,7 +289,7 @@ impl RecipeDb {
                 let instructions: Vec<String> =
                     serde_json::from_str(&instructions_str).unwrap_or_default();
 
-                    SearchHit {
+                SearchHit {
                     recipe: Recipe {
                         url: r.url,
                         title: r.title.unwrap_or_default(),
@@ -430,9 +326,10 @@ impl RecipeDb {
     }
 
     pub async fn queue_stats(&self) -> Result<QueueStats> {
-        let rows = sqlx::query!("SELECT status, COUNT(*) as count FROM scrape_queue GROUP BY status")
-            .fetch_all(&self.pool)
-            .await?;
+        let rows =
+            sqlx::query!("SELECT status, COUNT(*) as count FROM scrape_queue GROUP BY status")
+                .fetch_all(&self.pool)
+                .await?;
 
         let mut stats = QueueStats {
             pending: 0,
@@ -493,11 +390,11 @@ mod tests {
                 .connect(ADMIN_DSN)
                 .await
                 .unwrap();
-            sqlx::query("DROP DATABASE IF EXISTS recipe_book_test WITH (FORCE)")
+            sqlx::query!("DROP DATABASE IF EXISTS recipe_book_test WITH (FORCE)")
                 .execute(&pool)
                 .await
                 .unwrap();
-            sqlx::query("CREATE DATABASE recipe_book_test")
+            sqlx::query!("CREATE DATABASE recipe_book_test")
                 .execute(&pool)
                 .await
                 .unwrap();
@@ -506,11 +403,11 @@ mod tests {
         }
 
         let db = RecipeDb::new(TEST_DSN).await.unwrap();
-        sqlx::query("DELETE FROM scrape_queue")
+        sqlx::query!("DELETE FROM scrape_queue")
             .execute(&db.pool)
             .await
             .unwrap();
-        sqlx::query("DELETE FROM recipes")
+        sqlx::query!("DELETE FROM recipes")
             .execute(&db.pool)
             .await
             .unwrap();

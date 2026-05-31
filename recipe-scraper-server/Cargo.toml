@@ -8,10 +8,14 @@ axum = "0.8"
 utoipa = { version = "5", features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
 tokio-cron-scheduler = "0.13"
-reqwest = { version = "0.12", features = ["gzip", "rustls-tls", "socks"], default-features = false }
+reqwest = { version = "0.12", features = [
+  "gzip",
+  "rustls-tls",
+  "socks",
+], default-features = false }
 wreq = { version = "6.0.0-rc", features = ["gzip", "cookies"] }
 wreq-util = { version = "3.0.0-rc", features = ["emulation"] }
-sqlx = { version = "0.8", features = ["postgres", "runtime-tokio"] }
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "macros", "migrate"] }
 scraper = "0.23"
 recipe-scraper = "0.1.1"
 quick-xml = "0.37"
