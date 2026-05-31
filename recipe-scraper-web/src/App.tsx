@@ -119,6 +119,7 @@ const App = () => {
 
   const goToPage = (page: number) => {
     setOffset((page - 1) * 20);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const [selected, setSelected] = createSignal<Recipe | null>(null);

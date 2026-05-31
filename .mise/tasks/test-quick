@@ -2,4 +2,4 @@
 #MISE description="Run Rust tests excluding slow integration/retry tests"
 #MISE dir="recipe-scraper-server"
 #MISE depends=["lint-rs", "typecheck-rs"]
-cargo test -- --skip fetch_page
+cargo test -- --skip fetch_page "$@"

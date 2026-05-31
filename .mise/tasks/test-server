@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 #MISE description="Run Rust tests"
 #MISE dir="recipe-scraper-server"
-cargo test
+cargo test "$@"

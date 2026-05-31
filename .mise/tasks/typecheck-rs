@@ -2,4 +2,4 @@
 #MISE description="Type-check Rust code with cargo clippy"
 #MISE dir="recipe-scraper-server"
 #MISE depends=["format-rs"]
-cargo clippy
+cargo clippy --fix --allow-dirty "$@"

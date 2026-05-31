@@ -99,7 +99,7 @@ pub fn extract_publication(url: &str) -> String {
     let parts: Vec<&str> = cleaned.split('.').collect();
     let name_part = parts.first().map(|s| s.to_string()).unwrap_or(cleaned);
 
-    let name = name_part.replace('-', " ").replace('_', " ");
+    let name = name_part.replace(['-', '_'], " ");
 
     let words: Vec<String> = name
         .split_whitespace()
