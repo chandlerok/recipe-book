@@ -245,7 +245,7 @@ impl RecipeIndex {
         for pub_name in &["Bon Appétit", "NYT Cooking", "Epicurious"] {
             let term = Term::from_field_text(self.publication, pub_name);
             let term_query = TermQuery::new(term, IndexRecordOption::Basic);
-            outer.push((Occur::Should, Box::new(BoostQuery::new(Box::new(term_query), 0.3))));
+            outer.push((Occur::Should, Box::new(BoostQuery::new(Box::new(term_query), 0.05))));
         }
 
         let bool_query = BooleanQuery::new(outer);
