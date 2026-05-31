@@ -47,8 +47,7 @@ fn ngram_field(name: &str) -> FieldEntry {
     FieldEntry::new_text(
         name.to_string(),
         TextOptions::default().set_indexing_options(
-            TextFieldIndexing::default()
-                .set_index_option(IndexRecordOption::WithFreqs),
+            TextFieldIndexing::default().set_index_option(IndexRecordOption::WithFreqs),
         ),
     )
 }
@@ -377,8 +376,11 @@ impl RecipeIndex {
 
         let mut rows: Vec<RecipeDbRow> = query.fetch_all(&self.pool).await?;
 
-        let order: HashMap<&str, usize> =
-            urls.iter().enumerate().map(|(i, u)| (u.as_str(), i)).collect();
+        let order: HashMap<&str, usize> = urls
+            .iter()
+            .enumerate()
+            .map(|(i, u)| (u.as_str(), i))
+            .collect();
         rows.sort_by_key(|r| order.get(r.url.as_str()).copied().unwrap_or(usize::MAX));
 
         Ok(rows
@@ -432,8 +434,7 @@ mod tests {
         FieldEntry::new_text(
             name.to_string(),
             TextOptions::default().set_indexing_options(
-                TextFieldIndexing::default()
-                    .set_index_option(IndexRecordOption::WithFreqs),
+                TextFieldIndexing::default().set_index_option(IndexRecordOption::WithFreqs),
             ),
         )
     }
@@ -441,11 +442,17 @@ mod tests {
     impl TestIndex {
         fn build() -> Self {
             let mut sb = Schema::builder();
-            let url = sb.add_field(FieldEntry::new("url".to_string(), FieldType::Str(STRING | STORED)));
+            let url = sb.add_field(FieldEntry::new(
+                "url".to_string(),
+                FieldType::Str(STRING | STORED),
+            ));
             let title_ngram = sb.add_field(ngram_field("title_ngram"));
             let ingredients_ngram = sb.add_field(ngram_field("ingredients_ngram"));
             let _other = sb.add_field(FieldEntry::new_text("title".to_string(), TEXT | STORED));
-            let _other2 = sb.add_field(FieldEntry::new_text("instructions".to_string(), TEXT | STORED));
+            let _other2 = sb.add_field(FieldEntry::new_text(
+                "instructions".to_string(),
+                TEXT | STORED,
+            ));
             let schema = sb.build();
 
             let index = Index::create_in_ram(schema.clone());
@@ -521,7 +528,11 @@ mod tests {
     fn single_term_soup_matches_all_soups() {
         let index = TestIndex::build();
         index.add("fos", "French Onion Soup", "beef broth onions cheese bread");
-        index.add("cns", "Chicken Noodle Soup", "chicken noodles broth carrots");
+        index.add(
+            "cns",
+            "Chicken Noodle Soup",
+            "chicken noodles broth carrots",
+        );
         index.add("ts", "Tomato Soup", "tomatoes cream basil");
         index.add("ft", "French Toast", "bread eggs milk cinnamon");
         let results = index.search_urls("soup");
@@ -559,7 +570,11 @@ mod tests {
     fn chicken_soup_does_not_match_beef() {
         let index = TestIndex::build();
         index.add("fos", "French Onion Soup", "beef broth onions cheese bread");
-        index.add("cns", "Chicken Noodle Soup", "chicken noodles broth carrots");
+        index.add(
+            "cns",
+            "Chicken Noodle Soup",
+            "chicken noodles broth carrots",
+        );
         let results = index.search_urls("chicken soup");
         assert!(results.contains(&"cns".to_string()));
         assert!(!results.contains(&"fos".to_string()));
