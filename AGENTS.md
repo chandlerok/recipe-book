@@ -29,9 +29,32 @@ Tasks are defined as executable scripts in `.mise/tasks/`. Run them with `mise r
 - The crawler uses `reqwest` for sitemap crawling
 - Crawling runs on a daily cron schedule (midnight)
 - The crawler only enqueues URLs — background workers handle scraping
-- Full-text search uses PostgreSQL tsvector with weighted ranking (title=A, ingredients=B, instructions=C)
+- Search uses an in-memory tantivy index (`src/search.rs`) built from all recipes on startup
 - Swagger UI is available at `/docs/`
 - The SolidJS frontend is served as static files with SPA fallback
+
+### Search Heuristics
+
+Search is implemented in `src/search.rs` using tantivy's BM25 scoring.
+
+**Index schema** (stored fields for response, text fields for search):
+- `url` — stored string, used for document identity
+- `title` — text field (boost 3.0)
+- `ingredients` — text field (boost 1.5)
+- `instructions` — text field (boost 1.0)
+- `publication` — stored string, used for publication boost queries
+
+**Query structure** (nested boolean):
+1. **Must group** — at least one text/fuzzy clause must match (provides relevance floor):
+   - Multi-field full-text query with AND semantics (`set_conjunction_by_default`): all query terms must appear across title/ingredients/instructions, boosted 2x. AND only applies for queries with 3+ words — short queries (1-2 words) use OR
+   - Exact title match bonus (edit distance 0, boost 0.5)
+   - Prefix phrase queries on title and ingredients — "chick" matches "chicken", "chickpea" (boost 1.5)
+   - Fuzzy title fallback (edit distance 2, deboosted 0.5) — catches partial words and minor typos
+   - Fuzzy ingredients fallback (edit distance 2, deboosted 0.5)
+   - For 3+ word queries: minimum-should-match requiring N−1 of N words to appear
+2. **Should** — publication boost for known authoritative sites (Bon Appétit, NYT Cooking, Epicurious, boost 0.3)
+
+**Result fetching**: After the tantivy search returns matching URLs, full recipe data (ingredients/instructions as arrays) is fetched from PostgreSQL via `WHERE url IN (...)` to populate the response.
 
 ## Deployment
 
