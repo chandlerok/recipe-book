@@ -634,7 +634,7 @@ const App = () => {
       >
         <button
           onClick={toggleTheme}
-          style={`width: 28px; height: 28px; border-radius: 6px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; background: none; border: none; color: ${C().textMuted}; opacity: ${showToggle() ? 1 : 0}; transition: opacity 0.2s ease;`}
+          style={`width: 28px; height: 28px; border-radius: 6px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; background: ${showToggle() ? C().surface : "none"}; border: ${showToggle() ? `1px solid ${C().borderBtn}` : "none"}; box-shadow: ${showToggle() ? "4px 4px 4px rgba(0,0,0,0.2)" : "none"}; color: ${C().textMuted}; transition: background 0.15s ease, border 0.15s ease, box-shadow 0.15s ease;`}
         >
           <i class={isDark() ? "fas fa-sun" : "fas fa-moon"}></i>
         </button>
