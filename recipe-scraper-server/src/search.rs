@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use sqlx::PgPool;
+use std::collections::HashMap;
 use tantivy::{
     Index, IndexReader, ReloadPolicy, Term,
     collector::{Count, TopDocs},
@@ -42,6 +43,43 @@ fn extract_url(
     None
 }
 
+fn ngram_field(name: &str) -> FieldEntry {
+    FieldEntry::new_text(
+        name.to_string(),
+        TextOptions::default().set_indexing_options(
+            TextFieldIndexing::default()
+                .set_index_option(IndexRecordOption::WithFreqs),
+        ),
+    )
+}
+
+fn word_ngrams(text: &str) -> String {
+    text.to_lowercase()
+        .split_whitespace()
+        .flat_map(|word| {
+            let chars: Vec<char> = word.chars().collect();
+            let max_len = chars.len().min(20);
+            (2..=max_len).map(move |len| chars[..len].iter().collect::<String>())
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn query_ngrams(text: &str) -> Vec<String> {
+    let text = text.to_lowercase();
+    let mut ngrams: Vec<String> = Vec::new();
+    for word in text.split_whitespace() {
+        let chars: Vec<char> = word.chars().collect();
+        if chars.len() < 2 {
+            continue;
+        }
+        for len in 2..=chars.len().min(20) {
+            ngrams.push(chars[..len].iter().collect());
+        }
+    }
+    ngrams
+}
+
 impl RecipeIndex {
     pub async fn build(pool: PgPool) -> Result<Self> {
         info!("building search index from database");
@@ -52,26 +90,12 @@ impl RecipeIndex {
             FieldType::Str(STRING | STORED),
         ));
         let title = sb.add_field(FieldEntry::new_text("title".to_string(), TEXT | STORED));
-        let title_ngram = sb.add_field(FieldEntry::new_text(
-            "title_ngram".to_string(),
-            TextOptions::default().set_indexing_options(
-                TextFieldIndexing::default()
-                    .set_tokenizer("edge_ngram")
-                    .set_index_option(IndexRecordOption::WithFreqs),
-            ),
-        ));
+        let title_ngram = sb.add_field(ngram_field("title_ngram"));
         let ingredients = sb.add_field(FieldEntry::new_text(
             "ingredients".to_string(),
             TEXT | STORED,
         ));
-        let ingredients_ngram = sb.add_field(FieldEntry::new_text(
-            "ingredients_ngram".to_string(),
-            TextOptions::default().set_indexing_options(
-                TextFieldIndexing::default()
-                    .set_tokenizer("edge_ngram")
-                    .set_index_option(IndexRecordOption::WithFreqs),
-            ),
-        ));
+        let ingredients_ngram = sb.add_field(ngram_field("ingredients_ngram"));
         let instructions = sb.add_field(FieldEntry::new_text(
             "instructions".to_string(),
             TEXT | STORED,
@@ -91,12 +115,6 @@ impl RecipeIndex {
         let schema = sb.build();
 
         let index = Index::create_in_ram(schema.clone());
-
-        index.tokenizers().register("edge_ngram", {
-            TextAnalyzer::builder(NgramTokenizer::prefix_only(2, 20)?)
-                .filter(LowerCaser)
-                .build()
-        });
 
         #[derive(sqlx::FromRow)]
         struct RecipeRow {
@@ -135,12 +153,15 @@ impl RecipeIndex {
             let ing_joined = ing_text.join(" ");
             let instr_joined = instr_text.join(" ");
 
+            let title_ngrams = word_ngrams(title_str);
+            let ing_ngrams = word_ngrams(&ing_joined);
+
             writer.add_document(doc!(
                 url => row.url.as_str(),
                 title => title_str,
-                title_ngram => title_str,
+                title_ngram => title_ngrams.as_str(),
                 ingredients => ing_joined.as_str(),
-                ingredients_ngram => ing_joined.as_str(),
+                ingredients_ngram => ing_ngrams.as_str(),
                 instructions => instr_joined.as_str(),
                 publication => pub_str,
                 total_time => time_val,
@@ -180,13 +201,15 @@ impl RecipeIndex {
 
         let ing_joined = recipe.ingredients.join(" ");
         let instr_joined = recipe.instructions.join(" ");
+        let title_ngrams = word_ngrams(&recipe.title);
+        let ing_ngrams = word_ngrams(&ing_joined);
 
         writer.add_document(doc!(
             self.url => recipe.url.as_str(),
             self.title => recipe.title.as_str(),
-            self.title_ngram => recipe.title.as_str(),
+            self.title_ngram => title_ngrams.as_str(),
             self.ingredients => ing_joined.as_str(),
-            self.ingredients_ngram => ing_joined.as_str(),
+            self.ingredients_ngram => ing_ngrams.as_str(),
             self.instructions => instr_joined.as_str(),
             self.publication => recipe.publication.as_str(),
             self.total_time => recipe.total_time as i64,
@@ -199,7 +222,7 @@ impl RecipeIndex {
     }
 
     pub async fn search(&self, query_str: &str, limit: i32, offset: i32) -> SearchResults {
-        if query_str.len() < 2 {
+        if query_str.chars().count() < 2 {
             return SearchResults {
                 hits: Vec::new(),
                 total: 0,
@@ -212,8 +235,9 @@ impl RecipeIndex {
         let searcher = self.reader.searcher();
 
         let words: Vec<&str> = query_str.split_whitespace().collect();
-        let mut outer: Vec<(Occur, Box<dyn Query>)> = Vec::new();
+        let mut clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
 
+<<<<<<< HEAD
         // Filter using ngram fields so partial words like "chick" still match
         // "chicken". The QueryParser with conjunction_by_default requires every
         // query term to appear in at least one ngram field.
@@ -222,6 +246,29 @@ impl RecipeIndex {
         parser.set_conjunction_by_default();
         if let Ok(parsed) = parser.parse_query(query_str) {
             outer.push((Occur::Must, Box::new(parsed)));
+=======
+        let ngram_tokens = query_ngrams(query_str);
+
+        if ngram_tokens.is_empty() {
+            return SearchResults {
+                hits: Vec::new(),
+                total: 0,
+                offset,
+                limit,
+            };
+        }
+
+        for token in &ngram_tokens {
+            let mut field_clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
+            for field in [self.title_ngram, self.ingredients_ngram] {
+                let term = Term::from_field_text(field, token);
+                field_clauses.push((
+                    Occur::Should,
+                    Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs)),
+                ));
+            }
+            clauses.push((Occur::Must, Box::new(BooleanQuery::new(field_clauses))));
+>>>>>>> 8d52035 (update ngram logic)
         }
 
         // Score-only boosts (don't affect filtering)
@@ -233,12 +280,17 @@ impl RecipeIndex {
                 .map(|(i, w)| (i, Term::from_field_text(self.title, w)))
                 .collect();
             let phrase = PhraseQuery::new_with_offset_and_slop(phrase_terms, 1);
+<<<<<<< HEAD
             outer.push((
+=======
+            clauses.push((
+>>>>>>> 8d52035 (update ngram logic)
                 Occur::Should,
                 Box::new(BoostQuery::new(Box::new(phrase), 5.0)),
             ));
         }
 
+<<<<<<< HEAD
         // Publication boost
         for pub_name in &["Bon Appétit", "NYT Cooking", "Epicurious"] {
             let term = Term::from_field_text(self.publication, pub_name);
@@ -250,6 +302,9 @@ impl RecipeIndex {
         }
 
         let bool_query = BooleanQuery::new(outer);
+=======
+        let bool_query = BooleanQuery::new(clauses);
+>>>>>>> 8d52035 (update ngram logic)
 
         let (top_docs, total) = match searcher.search(
             &bool_query,
@@ -320,7 +375,11 @@ impl RecipeIndex {
             query = query.bind(url);
         }
 
-        let rows: Vec<RecipeDbRow> = query.fetch_all(&self.pool).await?;
+        let mut rows: Vec<RecipeDbRow> = query.fetch_all(&self.pool).await?;
+
+        let order: HashMap<&str, usize> =
+            urls.iter().enumerate().map(|(i, u)| (u.as_str(), i)).collect();
+        rows.sort_by_key(|r| order.get(r.url.as_str()).copied().unwrap_or(usize::MAX));
 
         Ok(rows
             .into_iter()
@@ -355,4 +414,154 @@ struct RecipeDbRow {
     instructions: Option<String>,
     image: Option<String>,
     publication: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TestIndex {
+        url: Field,
+        title_ngram: Field,
+        ingredients_ngram: Field,
+        index: Index,
+        reader: IndexReader,
+    }
+
+    fn ngram_field(name: &str) -> FieldEntry {
+        FieldEntry::new_text(
+            name.to_string(),
+            TextOptions::default().set_indexing_options(
+                TextFieldIndexing::default()
+                    .set_index_option(IndexRecordOption::WithFreqs),
+            ),
+        )
+    }
+
+    impl TestIndex {
+        fn build() -> Self {
+            let mut sb = Schema::builder();
+            let url = sb.add_field(FieldEntry::new("url".to_string(), FieldType::Str(STRING | STORED)));
+            let title_ngram = sb.add_field(ngram_field("title_ngram"));
+            let ingredients_ngram = sb.add_field(ngram_field("ingredients_ngram"));
+            let _other = sb.add_field(FieldEntry::new_text("title".to_string(), TEXT | STORED));
+            let _other2 = sb.add_field(FieldEntry::new_text("instructions".to_string(), TEXT | STORED));
+            let schema = sb.build();
+
+            let index = Index::create_in_ram(schema.clone());
+
+            let reader = index
+                .reader_builder()
+                .reload_policy(ReloadPolicy::OnCommitWithDelay)
+                .try_into()
+                .unwrap();
+
+            Self {
+                url,
+                title_ngram,
+                ingredients_ngram,
+                index,
+                reader,
+            }
+        }
+
+        fn add(&self, id: &str, title: &str, ingredients: &str) {
+            let mut writer = self.index.writer(50_000_000).unwrap();
+            let title_ngrams = word_ngrams(title);
+            let ing_ngrams = word_ngrams(ingredients);
+            writer
+                .add_document(doc!(
+                    self.url => id,
+                    self.title_ngram => title_ngrams.as_str(),
+                    self.ingredients_ngram => ing_ngrams.as_str(),
+                ))
+                .unwrap();
+            writer.commit().unwrap();
+            self.reader.reload().unwrap();
+        }
+
+        fn search_urls(&self, query_str: &str) -> Vec<String> {
+            let searcher = self.reader.searcher();
+            let mut clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
+
+            let ngram_tokens = query_ngrams(query_str);
+
+            if ngram_tokens.is_empty() {
+                return vec![];
+            }
+
+            for token in &ngram_tokens {
+                let mut field_clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
+                for field in [self.title_ngram, self.ingredients_ngram] {
+                    let term = Term::from_field_text(field, token);
+                    field_clauses.push((
+                        Occur::Should,
+                        Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs)),
+                    ));
+                }
+                clauses.push((Occur::Must, Box::new(BooleanQuery::new(field_clauses))));
+            }
+
+            let bool_query = BooleanQuery::new(clauses);
+            let (top_docs, _count) = searcher
+                .search(&bool_query, &(TopDocs::with_limit(10), Count))
+                .unwrap();
+
+            top_docs
+                .into_iter()
+                .filter_map(|(_score, addr)| {
+                    let doc: tantivy::TantivyDocument = searcher.doc(addr).ok()?;
+                    doc.get_first(self.url)?.as_str().map(String::from)
+                })
+                .collect()
+        }
+    }
+
+    #[test]
+    fn single_term_soup_matches_all_soups() {
+        let index = TestIndex::build();
+        index.add("fos", "French Onion Soup", "beef broth onions cheese bread");
+        index.add("cns", "Chicken Noodle Soup", "chicken noodles broth carrots");
+        index.add("ts", "Tomato Soup", "tomatoes cream basil");
+        index.add("ft", "French Toast", "bread eggs milk cinnamon");
+        let results = index.search_urls("soup");
+        assert_eq!(results.len(), 3, "Expected all 3 soups, got: {:?}", results);
+    }
+
+    #[test]
+    fn matches_via_ingredients() {
+        let index = TestIndex::build();
+        index.add("fos", "French Onion Soup", "beef broth onions cheese bread");
+        index.add("ft", "French Toast", "bread eggs milk cinnamon");
+        let results = index.search_urls("broth");
+        assert!(
+            results.contains(&"fos".to_string()),
+            "'broth' should match via ingredients, got: {:?}",
+            results
+        );
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn prefix_steps_produce_same_results() {
+        let index = TestIndex::build();
+        index.add("fos", "French Onion Soup", "beef broth onions cheese bread");
+        for prefix in &["fr", "fre", "fren", "frenc", "french"] {
+            let results = index.search_urls(prefix);
+            assert!(
+                results.contains(&"fos".to_string()),
+                "'{prefix}' should match French Onion Soup, got empty"
+            );
+        }
+    }
+
+    #[test]
+    fn chicken_soup_does_not_match_beef() {
+        let index = TestIndex::build();
+        index.add("fos", "French Onion Soup", "beef broth onions cheese bread");
+        index.add("cns", "Chicken Noodle Soup", "chicken noodles broth carrots");
+        let results = index.search_urls("chicken soup");
+        assert!(results.contains(&"cns".to_string()));
+        assert!(!results.contains(&"fos".to_string()));
+    }
 }

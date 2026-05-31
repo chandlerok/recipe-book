@@ -44,14 +44,17 @@ Search is implemented in `src/search.rs` using tantivy's BM25 scoring.
 - `instructions` — text field (boost 1.0)
 - `publication` — stored string, used for publication boost queries
 
-**Query structure** (nested boolean):
-1. **Must group** — at least one text/fuzzy clause must match (provides relevance floor):
-   - **All queries**: AND across the edge-ngram indexed fields (`title_ngram`, `ingredients_ngram`) — every n-gram of every query word must appear in at least one field. The `prefix_only(2, 20)` tokenizer generates prefix n-grams, so "sou" (n-grams: `so`, `sou`) matches "soup" (n-grams: `so`, `sou`, `sou`, `soup`), and "chick" matches "chicken" — without needing separate fuzzy or prefix queries.
-2. **Should** — score-only boosts that don't affect filtering:
-   - Exact phrase query in title with slop 1 (boost 5.0) — heavily favors consecutive word matches, so "French Onion Soup" beats "French Onion Cabbage Soup"
-   - Publication boost for known sites (Bon Appétit, NYT Cooking, Epicurious, boost 0.01)
+**Index tokenizer**: `NgramTokenizer::all_ngrams(2, 20)` + `LowerCaser`. Unlike `prefix_only` (which only emits n-grams starting at text position 0, making them useless beyond the first word), `all_ngrams` emits every length-2..20 substring of every word — so "sou" from a query matches "soup" anywhere in the indexed text.
 
-**Result fetching**: After the tantivy search returns matching URLs, full recipe data (ingredients/instructions as arrays) is fetched from PostgreSQL via `WHERE url IN (...)` to populate the response.
+**Query structure** (nested boolean):
+1. **Must group** — every n-gram of every query word must appear in at least one field:
+   - Query is tokenized by `query_ngrams()` (a Rust function, not the tantivy tokenizer) which splits on whitespace and generates per-word prefix n-grams: `query_ngrams("soup")` → `["so", "sou", "soup"]`
+   - Each ngram becomes a `TermQuery` OR-ed across `title_ngram` and `ingredients_ngram`, then AND-ed together: `(title:"so" OR ingr:"so") AND (title:"sou" OR ingr:"sou") AND (title:"soup" OR ingr:"soup")`
+   - This is equivalent to the original `QueryParser` intent but avoids position-based phrase queries that tantivy's parser creates from multi-token tokenizers.
+2. **Should** — score-only boosts that don't affect filtering:
+   - Exact phrase query in `title` with slop 1 (boost 5.0) — heavily favors consecutive word matches
+
+**Result fetching**: After tantivy search returns URLs sorted by BM25 score, the PG `WHERE url IN (...)` results are re-sorted via `HashMap<&str, usize>` to preserve tantivy's ranking order (PG does not guarantee `IN` clause ordering).
 
 ## Deployment
 
