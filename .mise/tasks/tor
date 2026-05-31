@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 #MISE description="Run a Tor SOCKS proxy via Podman on port 9050"
-podman run -d --rm --name tor-socks -p 9050:9050 dperson/torproxy
+podman run -d --rm --name tor-socks -p 9050:9050 dperson/torproxy "$@"

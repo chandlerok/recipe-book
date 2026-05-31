@@ -73,5 +73,13 @@ async fn main() -> Result<()> {
 
     sched.start().await?;
 
-    server::serve(cli.host, cli.port, cli.pg_dsn, cli.workers, cli.web_dist, search_index).await
+    server::serve(
+        cli.host,
+        cli.port,
+        cli.pg_dsn,
+        cli.workers,
+        cli.web_dist,
+        search_index,
+    )
+    .await
 }

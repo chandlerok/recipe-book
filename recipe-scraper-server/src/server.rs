@@ -119,7 +119,10 @@ async fn search_recipes_handler(
     let limit = params.limit.unwrap_or(20).clamp(1, 100);
     let offset = params.offset.unwrap_or(0).max(0);
 
-    let results = state.search_index.search(params.q.trim(), limit, offset).await;
+    let results = state
+        .search_index
+        .search(params.q.trim(), limit, offset)
+        .await;
     info!("search: query={} total={}", params.q, results.total);
     (StatusCode::OK, serde_json::to_string(&results).unwrap())
 }
@@ -311,7 +314,16 @@ pub async fn serve(
         let shutdown = shutdown.clone();
         let proxy_pool = proxy_pool.clone();
         tokio::spawn(async move {
-            run_worker(db, search_index, client, rate_limiter, shutdown, proxy_pool, i + 1).await;
+            run_worker(
+                db,
+                search_index,
+                client,
+                rate_limiter,
+                shutdown,
+                proxy_pool,
+                i + 1,
+            )
+            .await;
         });
     }
 
