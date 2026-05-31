@@ -332,7 +332,7 @@ impl RecipeIndex {
                     let mut combo_and: Vec<(Occur, Box<dyn Query>)> = Vec::new();
                     for &idx in combo {
                         let wq = term_in_fields(words[idx], &text_fields, 0);
-                        let boosted = BoostQuery::new(wq, 1.0);
+                        let boosted = BoostQuery::new(wq, 3.0);
                         combo_and.push((Occur::Must, Box::new(boosted)));
                     }
                     combo_or.push((Occur::Should, Box::new(BooleanQuery::new(combo_and))));
@@ -342,13 +342,17 @@ impl RecipeIndex {
 
             for &word in &words {
                 for field in &[self.title, self.ingredients] {
-                    let prefix =
-                        PhrasePrefixQuery::new(vec![Term::from_field_text(*field, word)]);
-                    clauses.push((Occur::Should, Box::new(BoostQuery::new(Box::new(prefix), 0.5))));
+                    let prefix = PhrasePrefixQuery::new(vec![Term::from_field_text(*field, word)]);
+                    clauses.push((
+                        Occur::Should,
+                        Box::new(BoostQuery::new(Box::new(prefix), 0.3)),
+                    ));
 
-                    let fuzzy =
-                        FuzzyTermQuery::new(Term::from_field_text(*field, word), 1, true);
-                    clauses.push((Occur::Should, Box::new(BoostQuery::new(Box::new(fuzzy), 0.3))));
+                    let fuzzy = FuzzyTermQuery::new(Term::from_field_text(*field, word), 1, true);
+                    clauses.push((
+                        Occur::Should,
+                        Box::new(BoostQuery::new(Box::new(fuzzy), 0.15)),
+                    ));
                 }
             }
         }

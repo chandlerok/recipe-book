@@ -51,7 +51,7 @@ Search is implemented in `src/search.rs` using tantivy's BM25 scoring.
    - Prefix phrase queries on title and ingredients — "chick" matches "chicken", "chickpea" (boost 1.5)
    - Fuzzy title fallback (edit distance 2, deboosted 0.5) — catches partial words and minor typos
    - Fuzzy ingredients fallback (edit distance 2, deboosted 0.5)
-   - For 3+ word queries: minimum-should-match requiring N−1 of N words to appear
+   - For 3+ word queries: minimum-should-match requiring N−1 of N words to appear. Each word must match exactly (edit distance 0) in at least one text field, boosted 3.0 per matching combination. Per-word prefix (0.3) and fuzzy (0.15) fallbacks catch partial words.
 2. **Should** — publication boost for known authoritative sites (Bon Appétit, NYT Cooking, Epicurious, boost 0.3)
 
 **Result fetching**: After the tantivy search returns matching URLs, full recipe data (ingredients/instructions as arrays) is fetched from PostgreSQL via `WHERE url IN (...)` to populate the response.
