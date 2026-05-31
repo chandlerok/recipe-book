@@ -1,3 +1,4 @@
+import "@fortawesome/fontawesome-free/css/all.min.css";
 import {
   createSignal,
   createResource,
@@ -253,7 +254,7 @@ const App = () => {
           onClick={toggleTheme}
           style={`width: 32px; height: 28px; border-radius: 4px; background: ${C().surface}; border: 1px solid ${C().borderBtn}; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); color: ${C().text};`}
         >
-          {isDark() ? "\u25CB" : "\u25CF"}
+          <i class={isDark() ? "fas fa-sun" : "fas fa-moon"}></i>
         </button>
       </div>
 
@@ -420,7 +421,10 @@ const App = () => {
         <div
           style={`display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 64px;`}
         >
-          <span style={`font-size: 48px; margin-bottom: 16px;`}>🔍</span>
+          <i
+            class="fas fa-magnifying-glass"
+            style={`font-size: 48px; margin-bottom: 16px; color: ${C().textInfo};`}
+          ></i>
           <p
             style={`font-family: ${FONTS.title}; font-size: 18px; color: ${C().accentSecondary}; margin: 0 0 8px;`}
           >
