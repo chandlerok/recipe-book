@@ -101,7 +101,8 @@ pub fn extract_publication(url: &str) -> String {
 
     let name = name_part.replace('-', " ").replace('_', " ");
 
-    let words: Vec<String> = name.split_whitespace()
+    let words: Vec<String> = name
+        .split_whitespace()
         .map(|w| {
             let mut c = w.chars();
             match c.next() {
