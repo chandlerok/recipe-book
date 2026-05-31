@@ -191,6 +191,8 @@ const App = () => {
 
   let searchInput!: HTMLInputElement;
 
+  const [showToggle, setShowToggle] = createSignal(false);
+
   const [selected, setSelected] = createSignal<Recipe | null>(null);
   const [animatingRecipe, setAnimatingRecipe] = createSignal<Recipe | null>(
     null,
@@ -244,19 +246,11 @@ const App = () => {
         style={`flex-shrink: 0; height: ${shouldCenter() ? "calc(50vh - 80px)" : "0px"}; transition: height 0.35s ease; overflow: hidden;`}
       />
 
-      <div style="display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
-        <h1
-          style={`font-family: ${FONTS.display}; font-size: 24px; font-weight: 400; color: ${C().accent}; margin: 0 0 16px;`}
-        >
-          Recipe Search
-        </h1>
-        <button
-          onClick={toggleTheme}
-          style={`width: 32px; height: 28px; border-radius: 4px; background: ${C().surface}; border: 1px solid ${C().borderBtn}; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); color: ${C().text};`}
-        >
-          <i class={isDark() ? "fas fa-sun" : "fas fa-moon"}></i>
-        </button>
-      </div>
+      <h1
+        style={`font-family: ${FONTS.display}; font-size: 24px; font-weight: 400; color: ${C().accent}; margin: 0 0 16px; flex-shrink: 0;`}
+      >
+        Recipe Search
+      </h1>
 
       <div style="position: relative; flex-shrink: 0;">
         <input
@@ -632,6 +626,19 @@ const App = () => {
           </div>
         )}
       </Show>
+
+      <div
+        onMouseEnter={() => setShowToggle(true)}
+        onMouseLeave={() => setShowToggle(false)}
+        style={`position: fixed; top: 0; right: 0; width: 48px; height: 48px; z-index: 1000; display: flex; align-items: flex-start; justify-content: flex-end; padding: 8px;`}
+      >
+        <button
+          onClick={toggleTheme}
+          style={`width: 28px; height: 28px; border-radius: 6px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; background: none; border: none; color: ${C().textMuted}; opacity: ${showToggle() ? 1 : 0}; transition: opacity 0.2s ease;`}
+        >
+          <i class={isDark() ? "fas fa-sun" : "fas fa-moon"}></i>
+        </button>
+      </div>
     </div>
   );
 };
