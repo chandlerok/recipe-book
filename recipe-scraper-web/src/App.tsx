@@ -1,4 +1,10 @@
-import { createSignal, createResource, Show, createEffect } from "solid-js";
+import {
+  createSignal,
+  createResource,
+  Show,
+  createEffect,
+  For,
+} from "solid-js";
 
 interface Recipe {
   url: string;
@@ -151,7 +157,7 @@ const App = () => {
 
   return (
     <div
-      style={`max-width: 640px; margin: 0 auto; padding: 2rem 1rem; background: ${COLORS.bg}; min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column;`}
+      style={`max-width: 640px; margin: 0 auto; padding: 2rem 1rem; min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column;`}
     >
       <div
         style={`flex-shrink: 0; height: ${shouldCenter() ? "calc(50vh - 80px)" : "0px"}; transition: height 0.35s ease; overflow: hidden;`}
@@ -168,8 +174,41 @@ const App = () => {
         placeholder="Search recipes..."
         value={query()}
         onInput={onInput}
-        style={`width: 100%; padding: 12px; font-family: ${FONTS.mono}; font-size: 16px; background: ${COLORS.input}; border: 1px solid ${COLORS.border}; border-radius: 8px; box-sizing: border-box; color: #fff; outline: none; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); flex-shrink: 0;`}
+        class="search-input"
+        style={`width: 100%; padding: 12px; font-family: ${FONTS.mono}; font-size: 16px; background: ${COLORS.input}; border: 1px solid ${COLORS.border}; border-radius: 8px; box-sizing: border-box; color: #fff; outline: none; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); flex-shrink: 0; transition: box-shadow 0.15s ease;`}
       />
+
+      <Show when={results.loading && query().trim() !== ""}>
+        <div style="display: flex; flex-direction: column; gap: 16px; padding-top: 16px;">
+          <div
+            class="skeleton"
+            style="width: 200px; height: 16px; margin-bottom: 4px;"
+          />
+          <For each={Array.from({ length: 3 })}>
+            {() => (
+              <div
+                class="skeleton-card"
+                style="display: flex; gap: 16px; padding: 0;"
+              >
+                <div
+                  class="skeleton"
+                  style="width: 80px; height: 80px; border-radius: 4px; flex-shrink: 0;"
+                />
+                <div style="padding: 16px 0; flex: 1;">
+                  <div class="skeleton" style="width: 60%; height: 16px;" />
+                  <div style="margin-top: 16px; display: flex; align-items: center; gap: 8px;">
+                    <div
+                      class="skeleton"
+                      style="width: 100px; height: 20px; border-radius: 100px;"
+                    />
+                    <div class="skeleton" style="width: 40px; height: 14px;" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
 
       <Show when={hits().length > 0 && query().trim() !== ""}>
         <p
@@ -182,6 +221,7 @@ const App = () => {
           {hits().map((hit) => (
             <div
               onClick={() => setSelected(hit.recipe)}
+              class="result-card"
               style={`${cardStyle} display: flex; gap: 16px; padding: 0; cursor: pointer;`}
             >
               {hit.recipe.image && (
@@ -255,6 +295,7 @@ const App = () => {
         <div
           style={`display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 64px;`}
         >
+          <span style={`font-size: 48px; margin-bottom: 16px;`}>🔍</span>
           <p
             style={`font-family: ${FONTS.title}; font-size: 18px; color: ${COLORS.accentSecondary}; margin: 0 0 8px;`}
           >
@@ -270,6 +311,60 @@ const App = () => {
 
       <style>{`
         @keyframes modal-enter { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+        @keyframes fade-in-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.7; } }
+
+        body::before {
+          content: '';
+          position: fixed;
+          inset: 0;
+          background:
+            radial-gradient(1450px circle at 70% -20%, rgba(200,103,185,0.04) 0%, transparent 70%),
+            radial-gradient(1250px circle at 20% 60%, rgba(200,103,185,0.025) 0%, transparent 65%),
+            radial-gradient(1000px circle at 50% 120%, rgba(213,11,11,0.02) 0%, transparent 60%);
+          pointer-events: none;
+        }
+
+        .search-input:focus {
+          box-shadow: 0 0 0 3px rgba(200,103,185,0.25), 4px 4px 4px rgba(0,0,0,0.2);
+        }
+
+        .result-card {
+          transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .result-card:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 0 0 1px rgba(200,103,185,0.3), 0 8px 24px rgba(200,103,185,0.08), 4px 4px 4px rgba(0,0,0,0.2);
+        }
+
+        .result-card:nth-child(1) { animation: fade-in-up 0.25s ease both; }
+        .result-card:nth-child(2) { animation: fade-in-up 0.25s ease 0.05s both; }
+        .result-card:nth-child(3) { animation: fade-in-up 0.25s ease 0.1s both; }
+        .result-card:nth-child(4) { animation: fade-in-up 0.25s ease 0.15s both; }
+        .result-card:nth-child(5) { animation: fade-in-up 0.25s ease 0.2s both; }
+        .result-card:nth-child(n+6) { animation: fade-in-up 0.25s ease 0.25s both; }
+
+        .skeleton {
+          background: linear-gradient(
+            90deg,
+            #1E1524 25%,
+            #291F38 50%,
+            #1E1524 75%
+          );
+          background-size: 400px 100%;
+          animation: shimmer 1.5s ease-in-out infinite;
+          border-radius: 4px;
+        }
+        .skeleton-card {
+          background: #1E1524;
+          border-radius: 8px;
+          border: 1px solid #0D0B12;
+          box-shadow: 4px 4px 4px rgba(0,0,0,0.2);
+        }
+        .skeleton-pulse {
+          animation: pulse 1.5s ease-in-out infinite;
+        }
       `}</style>
 
       <Show when={panelRevealed()}>
@@ -319,13 +414,30 @@ const App = () => {
                 </div>
               )}
 
-              {recipe.total_time > 0 && (
-                <p
-                  style={`font-family: ${FONTS.mono}; font-size: 13px; color: ${COLORS.textMuted}; margin: 0 0 24px;`}
-                >
-                  Total time: {recipe.total_time} min
-                </p>
-              )}
+              <div style="display: flex; align-items: center; gap: 8px; margin: 0 0 24px;">
+                <Show when={recipe.publication}>
+                  <span
+                    style={`display: inline-flex; align-items: center; gap: 4px; background: #2A1F30; border-radius: 100px; padding: 2px 8px; font-family: ${FONTS.mono}; font-size: 12px; color: ${COLORS.textPlaceholder};`}
+                  >
+                    <img
+                      src={faviconUrl(recipe.url)}
+                      alt=""
+                      style="width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0;"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                    {recipe.publication}
+                  </span>
+                </Show>
+                {recipe.total_time > 0 && (
+                  <span
+                    style={`font-family: ${FONTS.mono}; font-size: 13px; color: ${COLORS.textMuted};`}
+                  >
+                    Total time: {recipe.total_time} min
+                  </span>
+                )}
+              </div>
 
               <h3
                 style={`font-family: ${FONTS.mono}; font-weight: 600; font-size: 16px; color: ${COLORS.textHeader}; margin: 0 0 8px;`}
