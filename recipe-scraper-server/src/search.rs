@@ -3,11 +3,9 @@ use sqlx::PgPool;
 use tantivy::{
     Index, IndexReader, ReloadPolicy,
     collector::{TopDocs, Count},
-    query::{
-        BooleanQuery, BoostQuery, FuzzyTermQuery, Occur, PhrasePrefixQuery, PhraseQuery, Query,
-        QueryParser, TermQuery,
-    },
+    query::{BooleanQuery, BoostQuery, Occur, PhraseQuery, Query, QueryParser, TermQuery},
     schema::*,
+    tokenizer::{LowerCaser, NgramTokenizer, TextAnalyzer},
     doc, Term,
 };
 use tracing::info;
@@ -20,7 +18,9 @@ pub struct RecipeIndex {
     schema: Schema,
     url: Field,
     title: Field,
+    title_ngram: Field,
     ingredients: Field,
+    ingredients_ngram: Field,
     instructions: Field,
     publication: Field,
     total_time: Field,
@@ -42,15 +42,6 @@ fn extract_url(
     None
 }
 
-fn term_in_fields(term_text: &str, fields: &[Field], edit: u8) -> Box<dyn Query> {
-    let mut clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
-    for field in fields {
-        let tq = FuzzyTermQuery::new(Term::from_field_text(*field, term_text), edit, true);
-        clauses.push((Occur::Should, Box::new(tq)));
-    }
-    Box::new(BooleanQuery::new(clauses))
-}
-
 impl RecipeIndex {
     pub async fn build(pool: PgPool) -> Result<Self> {
         info!("building search index from database");
@@ -60,10 +51,29 @@ impl RecipeIndex {
             "url".to_string(),
             FieldType::Str(STRING | STORED),
         ));
-        let title = sb.add_field(FieldEntry::new_text("title".to_string(), TEXT | STORED));
+        let title = sb.add_field(FieldEntry::new_text(
+            "title".to_string(),
+            TEXT | STORED,
+        ));
+        let title_ngram = sb.add_field(FieldEntry::new_text(
+            "title_ngram".to_string(),
+            TextOptions::default().set_indexing_options(
+                TextFieldIndexing::default()
+                    .set_tokenizer("edge_ngram")
+                    .set_index_option(IndexRecordOption::WithFreqs),
+            ),
+        ));
         let ingredients = sb.add_field(FieldEntry::new_text(
             "ingredients".to_string(),
             TEXT | STORED,
+        ));
+        let ingredients_ngram = sb.add_field(FieldEntry::new_text(
+            "ingredients_ngram".to_string(),
+            TextOptions::default().set_indexing_options(
+                TextFieldIndexing::default()
+                    .set_tokenizer("edge_ngram")
+                    .set_index_option(IndexRecordOption::WithFreqs),
+            ),
         ));
         let instructions = sb.add_field(FieldEntry::new_text(
             "instructions".to_string(),
@@ -84,6 +94,12 @@ impl RecipeIndex {
         let schema = sb.build();
 
         let index = Index::create_in_ram(schema.clone());
+
+        index.tokenizers().register("edge_ngram", {
+            TextAnalyzer::builder(NgramTokenizer::prefix_only(2, 20)?)
+                .filter(LowerCaser)
+                .build()
+        });
 
         #[derive(sqlx::FromRow)]
         struct RecipeRow {
@@ -119,11 +135,16 @@ impl RecipeIndex {
             let instr_text: Vec<String> =
                 serde_json::from_str(instructions_str).unwrap_or_default();
 
+            let ing_joined = ing_text.join(" ");
+            let instr_joined = instr_text.join(" ");
+
             writer.add_document(doc!(
                 url => row.url.as_str(),
                 title => title_str,
-                ingredients => ing_text.join(" ").as_str(),
-                instructions => instr_text.join(" ").as_str(),
+                title_ngram => title_str,
+                ingredients => ing_joined.as_str(),
+                ingredients_ngram => ing_joined.as_str(),
+                instructions => instr_joined.as_str(),
                 publication => pub_str,
                 total_time => time_val,
                 image => image_str,
@@ -142,7 +163,9 @@ impl RecipeIndex {
             schema,
             url,
             title,
+            title_ngram,
             ingredients,
+            ingredients_ngram,
             instructions,
             publication,
             total_time,
@@ -158,11 +181,16 @@ impl RecipeIndex {
 
         writer.delete_term(Term::from_field_text(self.url, &recipe.url));
 
+        let ing_joined = recipe.ingredients.join(" ");
+        let instr_joined = recipe.instructions.join(" ");
+
         writer.add_document(doc!(
             self.url => recipe.url.as_str(),
             self.title => recipe.title.as_str(),
-            self.ingredients => recipe.ingredients.join(" ").as_str(),
-            self.instructions => recipe.instructions.join(" ").as_str(),
+            self.title_ngram => recipe.title.as_str(),
+            self.ingredients => ing_joined.as_str(),
+            self.ingredients_ngram => ing_joined.as_str(),
+            self.instructions => instr_joined.as_str(),
             self.publication => recipe.publication.as_str(),
             self.total_time => recipe.total_time as i64,
             self.image => recipe.image.as_str(),
@@ -187,45 +215,23 @@ impl RecipeIndex {
         let searcher = self.reader.searcher();
 
         let words: Vec<&str> = query_str.split_whitespace().collect();
-        let text_fields = vec![self.title, self.ingredients, self.instructions];
         let mut outer: Vec<(Occur, Box<dyn Query>)> = Vec::new();
 
-        if words.len() <= 2 {
-            // Short queries: OR filter permissive
-            let mut or_clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
-            let parser = QueryParser::for_index(&self.index, text_fields);
-            if let Ok(parsed) = parser.parse_query(query_str) {
-                or_clauses.push((Occur::Should, Box::new(BoostQuery::new(Box::new(parsed), 2.0))));
-            }
-            for field in &[self.title, self.ingredients] {
-                let prefix = PhrasePrefixQuery::new(vec![Term::from_field_text(*field, query_str)]);
-                or_clauses.push((Occur::Should, Box::new(BoostQuery::new(Box::new(prefix), 1.5))));
-            }
-            outer.push((Occur::Must, Box::new(BooleanQuery::new(or_clauses))));
-        } else {
-            // Long queries: every word must appear somewhere (AND filter)
-            let mut and_clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
-            for word in &words {
-                let wq = term_in_fields(word, &text_fields, 1);
-                and_clauses.push((Occur::Must, Box::new(wq)));
-            }
-            outer.push((Occur::Must, Box::new(BooleanQuery::new(and_clauses))));
+        // Filter using ngram fields so partial words like "chick" still match
+        // "chicken". The QueryParser with conjunction_by_default requires every
+        // query term to appear in at least one ngram field.
+        let ngram_fields = vec![self.title_ngram, self.ingredients_ngram];
+        let mut parser = QueryParser::for_index(&self.index, ngram_fields);
+        if words.len() >= 3 {
+            parser.set_conjunction_by_default();
+        }
+        if let Ok(parsed) = parser.parse_query(query_str) {
+            outer.push((Occur::Must, Box::new(parsed)));
         }
 
-        // Score-only boosts (these don't affect filtering, only ranking)
+        // Score-only boosts (don't affect filtering)
         if words.len() >= 2 {
-            // Per-word prefix boosts
-            for word in &words {
-                for field in &[self.title, self.ingredients] {
-                    let prefix = PhrasePrefixQuery::new(vec![Term::from_field_text(*field, word)]);
-                    outer.push((Occur::Should, Box::new(BoostQuery::new(Box::new(prefix), 0.3))));
-
-                    let fuzzy = FuzzyTermQuery::new(Term::from_field_text(*field, word), 2, true);
-                    outer.push((Occur::Should, Box::new(BoostQuery::new(Box::new(fuzzy), 0.15))));
-                }
-            }
-
-            // Phrase query: exact consecutive words in title get massive boost
+            // Phrase query in standard title field for exact consecutive word match
             let phrase_terms: Vec<(usize, Term)> = words
                 .iter()
                 .enumerate()
