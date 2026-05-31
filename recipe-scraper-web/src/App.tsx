@@ -238,7 +238,7 @@ const App = () => {
   return (
     <div
       onKeyDown={onKeyDown}
-      style={`max-width: 640px; margin: 0 auto; padding: 2rem 1rem; min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column;`}
+      style={`max-width: 640px; margin: 0 auto; padding: 2rem 1rem; min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; --sk-from: ${C().surface}; --sk-mid: ${C().input}; --sk-card-bg: ${C().surface}; --sk-card-border: ${C().border};`}
     >
       <div
         style={`flex-shrink: 0; height: ${shouldCenter() ? "calc(50vh - 80px)" : "0px"}; transition: height 0.35s ease; overflow: hidden;`}
@@ -498,33 +498,19 @@ const App = () => {
         .skeleton {
           background: linear-gradient(
             90deg,
-            #1E1524 25%,
-            #291F38 50%,
-            #1E1524 75%
+            var(--sk-from) 25%,
+            var(--sk-mid) 50%,
+            var(--sk-from) 75%
           );
           background-size: 400px 100%;
           animation: shimmer 1.5s ease-in-out infinite;
           border-radius: 4px;
         }
         .skeleton-card {
-          background: #1E1524;
+          background: var(--sk-card-bg);
           border-radius: 8px;
-          border: 1px solid #0D0B12;
+          border: 1px solid var(--sk-card-border);
           box-shadow: 4px 4px 4px rgba(0,0,0,0.2);
-        }
-        .skeleton-pulse {
-          animation: pulse 1.5s ease-in-out infinite;
-        }
-
-        @media (prefers-color-scheme: light) {
-          .skeleton {
-            background: linear-gradient(90deg, #E8E2DC 25%, #F0EAE4 50%, #E8E2DC 75%);
-            background-size: 400px 100%;
-          }
-          .skeleton-card {
-            background: #FFFFFF;
-            border: 1px solid #E0D8D0;
-          }
         }
       `}</style>
 
