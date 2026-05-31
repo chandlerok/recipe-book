@@ -1,14 +1,14 @@
 use anyhow::{Context, Result};
 use sqlx::PgPool;
 use tantivy::{
-    Index, IndexReader, ReloadPolicy,
-    collector::{TopDocs, Count},
+    Index, IndexReader, ReloadPolicy, Term,
+    collector::{Count, TopDocs},
+    doc,
     query::{
         BooleanQuery, BoostQuery, FuzzyTermQuery, Occur, PhrasePrefixQuery, PhraseQuery, Query,
         QueryParser, TermQuery,
     },
     schema::*,
-    doc, Term,
 };
 use tracing::info;
 
