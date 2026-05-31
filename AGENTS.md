@@ -13,7 +13,7 @@ The frontend is server-rendered HTML with htmx. There is no separate frontend bu
 Tasks are defined as executable scripts in `.mise/tasks/`. Run them with `mise run <task>`.
 
 ### Development
-- `mise run dev` — Run the server in dev mode
+- `mise run dev` — Run the server with auto-reload on file changes
 - `mise run build` — Build the server for production
 - `mise run test` — Run Rust tests
 - `mise run pre-commit` — Run all checks (run automatically by git hooks)

@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-#MISE description="Run the server in development mode"
+#MISE description="Run the server in development mode with auto-reload"
 #MISE dir="recipe-scraper-server"
-cargo run
+cargo watch -x run
