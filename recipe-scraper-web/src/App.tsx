@@ -251,9 +251,9 @@ const App = () => {
         </h1>
         <button
           onClick={toggleTheme}
-          style={`width: 32px; height: 28px; border-radius: 4px; background: ${C().surface}; border: 1px solid ${C().borderBtn}; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 4px 4px 4px rgba(0,0,0,0.2);`}
+          style={`width: 32px; height: 28px; border-radius: 4px; background: ${C().surface}; border: 1px solid ${C().borderBtn}; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); color: ${C().text};`}
         >
-          {isDark() ? "\u263C" : "\u263E"}
+          {isDark() ? "\u25CB" : "\u25CF"}
         </button>
       </div>
 
