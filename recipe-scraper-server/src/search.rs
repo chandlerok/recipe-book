@@ -1,14 +1,14 @@
 use anyhow::{Context, Result};
 use sqlx::PgPool;
 use tantivy::{
-    Index, IndexReader, ReloadPolicy, Term,
-    collector::{Count, TopDocs},
-    doc,
+    Index, IndexReader, ReloadPolicy,
+    collector::{TopDocs, Count},
     query::{
-        BooleanQuery, BoostQuery, FuzzyTermQuery, Occur, PhrasePrefixQuery, Query, QueryParser,
-        TermQuery,
+        BooleanQuery, BoostQuery, FuzzyTermQuery, Occur, PhrasePrefixQuery, PhraseQuery, Query,
+        QueryParser, TermQuery,
     },
     schema::*,
+    doc, Term,
 };
 use tracing::info;
 
@@ -308,6 +308,22 @@ impl RecipeIndex {
                 ));
             }
 
+            // Exact phrase match in title — heavily boosts recipes where query
+            // words appear consecutively, so "french onion soup" beats "french
+            // onion cabbage soup".
+            if words.len() >= 2 {
+                let phrase_terms: Vec<(usize, Term)> = words
+                    .iter()
+                    .enumerate()
+                    .map(|(i, w)| (i, Term::from_field_text(self.title, w)))
+                    .collect();
+                let phrase = PhraseQuery::new_with_offset_and_slop(phrase_terms, 1);
+                clauses.push((
+                    Occur::Should,
+                    Box::new(BoostQuery::new(Box::new(phrase), 5.0)),
+                ));
+            }
+
             // Deeper fuzzy matching for typos and partial words
             let fuzzy_title =
                 FuzzyTermQuery::new(Term::from_field_text(self.title, query_str), 2, true);
@@ -355,6 +371,19 @@ impl RecipeIndex {
                     ));
                 }
             }
+
+            // Exact phrase match in title — heavily favors recipes where the
+            // query words appear consecutively rather than scattered.
+            let phrase_terms: Vec<(usize, Term)> = words
+                .iter()
+                .enumerate()
+                .map(|(i, w)| (i, Term::from_field_text(self.title, w)))
+                .collect();
+            let phrase = PhraseQuery::new_with_offset_and_slop(phrase_terms, 1);
+            clauses.push((
+                Occur::Should,
+                Box::new(BoostQuery::new(Box::new(phrase), 5.0)),
+            ));
         }
 
         clauses
