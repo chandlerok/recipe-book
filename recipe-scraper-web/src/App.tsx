@@ -4,6 +4,7 @@ import {
   Show,
   createEffect,
   For,
+  onCleanup,
 } from "solid-js";
 
 interface Recipe {
@@ -85,7 +86,7 @@ function pageNumbers(current: number, total: number): (number | "...")[] {
   return pages;
 }
 
-const COLORS = {
+const DARK_COLORS = {
   bg: "#15101D",
   surface: "#1E1524",
   input: "#291F38",
@@ -97,7 +98,25 @@ const COLORS = {
   textInfo: "#555555",
   textHeader: "#888888",
   textPlaceholder: "#999999",
-} as const;
+  pillBg: "#2A1F30",
+  text: "#ffffff",
+};
+
+const LIGHT_COLORS = {
+  bg: "#F5F0EB",
+  surface: "#FFFFFF",
+  input: "#EDE8E3",
+  border: "#E0D8D0",
+  borderBtn: "#D8D0C8",
+  accent: "#D50B0B",
+  accentSecondary: "#C867B9",
+  textMuted: "#888888",
+  textInfo: "#AAAAAA",
+  textHeader: "#666666",
+  textPlaceholder: "#BBBBBB",
+  pillBg: "#F0EAE4",
+  text: "#1A1520",
+};
 
 const FONTS = {
   display: "'Zen Dots'",
@@ -107,11 +126,43 @@ const FONTS = {
   body: "'Coda'",
 } as const;
 
-const cardStyle = `background: ${COLORS.surface}; border: 1px solid ${COLORS.border}; border-radius: 8px; box-shadow: 4px 4px 4px rgba(0,0,0,0.2);`;
-const btnStyle = `background: ${COLORS.surface}; border: 1px solid ${COLORS.borderBtn}; border-radius: 4px; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); cursor: pointer; font-family: ${FONTS.title}; font-size: 10px; color: ${COLORS.accent}; padding: 6px 14px;`;
-const btnDisabled = `${btnStyle} opacity: 0.5; cursor: default;`;
+const cardStyle = (c: typeof DARK_COLORS) =>
+  `background: ${c.surface}; border: 1px solid ${c.border}; border-radius: 8px; box-shadow: 4px 4px 4px rgba(0,0,0,0.2);`;
+
+const btnStyle = (c: typeof DARK_COLORS) =>
+  `background: ${c.surface}; border: 1px solid ${c.borderBtn}; border-radius: 4px; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); cursor: pointer; font-family: ${FONTS.title}; font-size: 10px; color: ${c.accent}; padding: 6px 14px;`;
+
+const btnDisabled = (c: typeof DARK_COLORS) =>
+  `${btnStyle(c)} opacity: 0.5; cursor: default;`;
 
 const App = () => {
+  const [isDark, setIsDark] = createSignal(
+    window.matchMedia("(prefers-color-scheme: dark)").matches,
+  );
+  const [followSystem, setFollowSystem] = createSignal(true);
+
+  createEffect(() => {
+    if (!followSystem()) return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = (e: MediaQueryListEvent) => setIsDark(e.matches);
+    mq.addEventListener("change", handler);
+    onCleanup(() => mq.removeEventListener("change", handler));
+  });
+
+  createEffect(() => {
+    const bg = isDark() ? "#15101D" : "#F5F0EB";
+    document.body.style.background = bg;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", bg);
+  });
+
+  const C = () => (isDark() ? DARK_COLORS : LIGHT_COLORS);
+
+  const toggleTheme = () => {
+    setFollowSystem(false);
+    setIsDark((v) => !v);
+  };
+
   const [query, setQuery] = createSignal("");
   const [offset, setOffset] = createSignal(0);
 
@@ -192,11 +243,19 @@ const App = () => {
         style={`flex-shrink: 0; height: ${shouldCenter() ? "calc(50vh - 80px)" : "0px"}; transition: height 0.35s ease; overflow: hidden;`}
       />
 
-      <h1
-        style={`font-family: ${FONTS.display}; font-size: 24px; font-weight: 400; color: ${COLORS.accent}; margin: 0 0 16px; flex-shrink: 0;`}
-      >
-        Recipe Search
-      </h1>
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
+        <h1
+          style={`font-family: ${FONTS.display}; font-size: 24px; font-weight: 400; color: ${C().accent}; margin: 0 0 16px;`}
+        >
+          Recipe Search
+        </h1>
+        <button
+          onClick={toggleTheme}
+          style={`width: 32px; height: 28px; border-radius: 4px; background: ${C().surface}; border: 1px solid ${C().borderBtn}; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 4px 4px 4px rgba(0,0,0,0.2);`}
+        >
+          {isDark() ? "☀️" : "🌙"}
+        </button>
+      </div>
 
       <div style="position: relative; flex-shrink: 0;">
         <input
@@ -206,7 +265,7 @@ const App = () => {
           onInput={onInput}
           ref={searchInput!}
           class="search-input"
-          style={`width: 100%; padding: 12px; font-family: ${FONTS.mono}; font-size: 16px; background: ${COLORS.input}; border: 1px solid ${COLORS.border}; border-radius: 8px; box-sizing: border-box; color: #fff; outline: none; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); transition: box-shadow 0.15s ease; padding-right: ${query().trim() ? "36px" : "12px"};`}
+          style={`width: 100%; padding: 12px; font-family: ${FONTS.mono}; font-size: 16px; background: ${C().input}; border: 1px solid ${C().border}; border-radius: 8px; box-sizing: border-box; color: ${C().text}; outline: none; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); transition: box-shadow 0.15s ease; padding-right: ${query().trim() ? "36px" : "12px"};`}
         />
         <Show when={query().trim() !== ""}>
           <button
@@ -255,7 +314,7 @@ const App = () => {
 
       <Show when={hits().length > 0 && query().trim() !== ""}>
         <p
-          style={`font-family: ${FONTS.heading}; font-weight: 600; font-size: 14px; color: ${COLORS.textHeader}; margin: 16px 0 4px;`}
+          style={`font-family: ${FONTS.heading}; font-weight: 600; font-size: 14px; color: ${C().textHeader}; margin: 16px 0 4px;`}
         >
           {total()} recipes found
         </p>
@@ -265,7 +324,7 @@ const App = () => {
             <div
               onClick={() => setSelected(hit.recipe)}
               class="result-card"
-              style={`${cardStyle} display: flex; gap: 16px; padding: 0; cursor: pointer;`}
+              style={`${cardStyle(C())} display: flex; gap: 16px; padding: 0; cursor: pointer;`}
             >
               {hit.recipe.image && (
                 <img
@@ -277,14 +336,14 @@ const App = () => {
               )}
               <div style="padding: 16px 0; min-width: 0;">
                 <span
-                  style={`font-family: ${FONTS.title}; font-size: 16px; font-weight: 400; color: ${COLORS.accentSecondary}; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;`}
+                  style={`font-family: ${FONTS.title}; font-size: 16px; font-weight: 400; color: ${C().accentSecondary}; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;`}
                 >
                   {hit.recipe.title}
                 </span>
                 <div style="margin: 8px 0 0; display: flex; align-items: center; gap: 8px;">
                   <Show when={hit.recipe.publication}>
                     <span
-                      style={`display: inline-flex; align-items: center; gap: 4px; background: #2A1F30; border-radius: 100px; padding: 2px 8px; font-family: ${FONTS.mono}; font-size: 12px; color: ${COLORS.textPlaceholder};`}
+                      style={`display: inline-flex; align-items: center; gap: 4px; background: ${C().pillBg}; border-radius: 100px; padding: 2px 8px; font-family: ${FONTS.mono}; font-size: 12px; color: ${C().textPlaceholder};`}
                     >
                       <img
                         src={faviconUrl(hit.recipe.url)}
@@ -299,7 +358,7 @@ const App = () => {
                   </Show>
                   {hit.recipe.total_time > 0 && (
                     <span
-                      style={`font-family: ${FONTS.mono}; font-size: 13.6px; color: ${COLORS.textMuted};`}
+                      style={`font-family: ${FONTS.mono}; font-size: 13.6px; color: ${C().textMuted};`}
                     >
                       {hit.recipe.total_time} min
                     </span>
@@ -317,7 +376,7 @@ const App = () => {
           <button
             onClick={() => goToPage(currentPage() - 1)}
             disabled={currentPage() <= 1}
-            style={currentPage() <= 1 ? btnDisabled : btnStyle}
+            style={currentPage() <= 1 ? btnDisabled(C()) : btnStyle(C())}
           >
             ◀
           </button>
@@ -326,7 +385,7 @@ const App = () => {
             {(page) =>
               page === "..." ? (
                 <span
-                  style={`font-family: ${FONTS.mono}; font-size: 12px; color: ${COLORS.textInfo}; padding: 0 2px;`}
+                  style={`font-family: ${FONTS.mono}; font-size: 12px; color: ${C().textInfo}; padding: 0 2px;`}
                 >
                   …
                 </span>
@@ -335,8 +394,8 @@ const App = () => {
                   onClick={() => goToPage(page as number)}
                   style={
                     page === currentPage()
-                      ? `${btnStyle} background: ${COLORS.accentSecondary}; color: #15101D; border-color: ${COLORS.accentSecondary};`
-                      : btnStyle
+                      ? `${btnStyle(C())} background: ${C().accentSecondary}; color: #15101D; border-color: ${C().accentSecondary};`
+                      : btnStyle(C())
                   }
                 >
                   {page}
@@ -348,7 +407,9 @@ const App = () => {
           <button
             onClick={() => goToPage(currentPage() + 1)}
             disabled={currentPage() >= pageCount()}
-            style={currentPage() >= pageCount() ? btnDisabled : btnStyle}
+            style={
+              currentPage() >= pageCount() ? btnDisabled(C()) : btnStyle(C())
+            }
           >
             ▶
           </button>
@@ -361,12 +422,12 @@ const App = () => {
         >
           <span style={`font-size: 48px; margin-bottom: 16px;`}>🔍</span>
           <p
-            style={`font-family: ${FONTS.title}; font-size: 18px; color: ${COLORS.accentSecondary}; margin: 0 0 8px;`}
+            style={`font-family: ${FONTS.title}; font-size: 18px; color: ${C().accentSecondary}; margin: 0 0 8px;`}
           >
             No recipes found
           </p>
           <p
-            style={`font-family: ${FONTS.mono}; font-size: 14px; color: ${COLORS.textMuted}; margin: 0;`}
+            style={`font-family: ${FONTS.mono}; font-size: 14px; color: ${C().textMuted}; margin: 0;`}
           >
             Try adjusting your search term
           </p>
@@ -388,6 +449,7 @@ const App = () => {
             radial-gradient(1250px circle at 20% 60%, rgba(200,103,185,0.025) 0%, transparent 65%),
             radial-gradient(1000px circle at 50% 120%, rgba(213,11,11,0.02) 0%, transparent 60%);
           pointer-events: none;
+          transition: opacity 0.3s ease;
         }
 
         .search-input:focus {
@@ -449,6 +511,17 @@ const App = () => {
         .skeleton-pulse {
           animation: pulse 1.5s ease-in-out infinite;
         }
+
+        @media (prefers-color-scheme: light) {
+          .skeleton {
+            background: linear-gradient(90deg, #E8E2DC 25%, #F0EAE4 50%, #E8E2DC 75%);
+            background-size: 400px 100%;
+          }
+          .skeleton-card {
+            background: #FFFFFF;
+            border: 1px solid #E0D8D0;
+          }
+        }
       `}</style>
 
       <Show when={panelRevealed()}>
@@ -464,17 +537,17 @@ const App = () => {
             style={`position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; pointer-events: none;`}
           >
             <div
-              style={`width: min(540px, calc(100vw - 32px)); max-height: 85vh; background: ${COLORS.bg}; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); padding: 24px; box-sizing: border-box; overflow-y: auto; overflow-x: hidden; pointer-events: auto; animation: modal-enter 0.2s ease; transform: scale(${isClosing() ? 0.95 : 1}); opacity: ${isClosing() ? 0 : 1}; transition: transform 0.2s ease, opacity 0.2s ease;`}
+              style={`width: min(540px, calc(100vw - 32px)); max-height: 85vh; background: ${C().bg}; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); padding: 24px; box-sizing: border-box; overflow-y: auto; overflow-x: hidden; pointer-events: auto; animation: modal-enter 0.2s ease; transform: scale(${isClosing() ? 0.95 : 1}); opacity: ${isClosing() ? 0 : 1}; transition: transform 0.2s ease, opacity 0.2s ease;`}
             >
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                 <h2
-                  style={`margin: 0; font-family: ${FONTS.title}; font-size: 18px; font-weight: 400; color: ${COLORS.accentSecondary}; line-height: 1.3;`}
+                  style={`margin: 0; font-family: ${FONTS.title}; font-size: 18px; font-weight: 400; color: ${C().accentSecondary}; line-height: 1.3;`}
                 >
                   {recipe.title}
                 </h2>
                 <button
                   onClick={() => setSelected(null)}
-                  style={`background: none; border: none; font-family: ${FONTS.mono}; font-size: 20px; cursor: pointer; padding: 0; line-height: 1; color: ${COLORS.accent};`}
+                  style={`background: none; border: none; font-family: ${FONTS.mono}; font-size: 20px; cursor: pointer; padding: 0; line-height: 1; color: ${C().accent};`}
                 >
                   ✕
                 </button>
@@ -485,7 +558,7 @@ const App = () => {
                   src={recipe.image}
                   alt={recipe.title}
                   loading="lazy"
-                  style={`width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 20px; background: ${COLORS.surface}; border: 1px solid ${COLORS.border}; box-shadow: 4px 4px 4px rgba(0,0,0,0.2);`}
+                  style={`width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 20px; background: ${C().surface}; border: 1px solid ${C().border}; box-shadow: 4px 4px 4px rgba(0,0,0,0.2);`}
                   onError={(e) => {
                     (e.target as HTMLImageElement).style.display = "none";
                     (e.target as HTMLImageElement).insertAdjacentHTML(
@@ -496,10 +569,10 @@ const App = () => {
                 />
               ) : (
                 <div
-                  style={`width: 100%; height: 200px; border-radius: 8px; margin-bottom: 20px; background: ${COLORS.surface}; border: 1px solid ${COLORS.border}; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center;`}
+                  style={`width: 100%; height: 200px; border-radius: 8px; margin-bottom: 20px; background: ${C().surface}; border: 1px solid ${C().border}; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center;`}
                 >
                   <span
-                    style={`font-family: ${FONTS.mono}; font-size: 14px; color: #555;`}
+                    style={`font-family: ${FONTS.mono}; font-size: 14px; color: ${C().textInfo};`}
                   >
                     Image placeholder
                   </span>
@@ -509,7 +582,7 @@ const App = () => {
               <div style="display: flex; align-items: center; gap: 8px; margin: 0 0 24px;">
                 <Show when={recipe.publication}>
                   <span
-                    style={`display: inline-flex; align-items: center; gap: 4px; background: #2A1F30; border-radius: 100px; padding: 2px 8px; font-family: ${FONTS.mono}; font-size: 12px; color: ${COLORS.textPlaceholder};`}
+                    style={`display: inline-flex; align-items: center; gap: 4px; background: ${C().pillBg}; border-radius: 100px; padding: 2px 8px; font-family: ${FONTS.mono}; font-size: 12px; color: ${C().textPlaceholder};`}
                   >
                     <img
                       src={faviconUrl(recipe.url)}
@@ -524,7 +597,7 @@ const App = () => {
                 </Show>
                 {recipe.total_time > 0 && (
                   <span
-                    style={`font-family: ${FONTS.mono}; font-size: 13px; color: ${COLORS.textMuted};`}
+                    style={`font-family: ${FONTS.mono}; font-size: 13px; color: ${C().textMuted};`}
                   >
                     Total time: {recipe.total_time} min
                   </span>
@@ -532,12 +605,12 @@ const App = () => {
               </div>
 
               <h3
-                style={`font-family: ${FONTS.mono}; font-weight: 600; font-size: 16px; color: ${COLORS.textHeader}; margin: 0 0 8px;`}
+                style={`font-family: ${FONTS.mono}; font-weight: 600; font-size: 16px; color: ${C().textHeader}; margin: 0 0 8px;`}
               >
                 Ingredients
               </h3>
               <ul
-                style={`padding-left: 20px; margin: 0 0 24px; font-family: ${FONTS.body}; font-size: 14px; color: ${COLORS.textMuted}; line-height: 1.8; overflow-wrap: break-word;`}
+                style={`padding-left: 20px; margin: 0 0 24px; font-family: ${FONTS.body}; font-size: 14px; color: ${C().textMuted}; line-height: 1.8; overflow-wrap: break-word;`}
               >
                 {recipe.ingredients.map((ing) => (
                   <li>{ing}</li>
@@ -545,12 +618,12 @@ const App = () => {
               </ul>
 
               <h3
-                style={`font-family: ${FONTS.mono}; font-weight: 600; font-size: 16px; color: ${COLORS.textHeader}; margin: 0 0 8px;`}
+                style={`font-family: ${FONTS.mono}; font-weight: 600; font-size: 16px; color: ${C().textHeader}; margin: 0 0 8px;`}
               >
                 Instructions
               </h3>
               <ol
-                style={`padding-left: 20px; margin: 0 0 24px; font-family: ${FONTS.body}; font-size: 14px; color: ${COLORS.textMuted}; line-height: 1.8; overflow-wrap: break-word;`}
+                style={`padding-left: 20px; margin: 0 0 24px; font-family: ${FONTS.body}; font-size: 14px; color: ${C().textMuted}; line-height: 1.8; overflow-wrap: break-word;`}
               >
                 {recipe.instructions.map((step) => (
                   <li style="margin-bottom: 4px;">{step}</li>
@@ -561,7 +634,7 @@ const App = () => {
                 href={recipe.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={`display: inline-block; font-family: ${FONTS.title}; font-size: 13px; color: ${COLORS.accentSecondary}; text-decoration: none;`}
+                style={`display: inline-block; font-family: ${FONTS.title}; font-size: 13px; color: ${C().accentSecondary}; text-decoration: none;`}
               >
                 View original recipe ↗
               </a>
