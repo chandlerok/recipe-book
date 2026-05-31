@@ -1,32 +1,20 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-
 use anyhow::{Context, Result};
 use sqlx::postgres::PgPoolOptions;
-use tokio::sync::RwLock;
 use tracing::info;
 
-use crate::models::{QueueStats, Recipe, SearchHit, SearchResults};
+use crate::models::{QueueStats, Recipe};
 use crate::scraper::ScrapedRecipe;
 
 pub const CRAWL_LOCK_ID: i64 = 42;
 
-struct CacheEntry {
-    hits: SearchResults,
-    at: Instant,
-}
-
 pub struct RecipeDb {
     pool: sqlx::PgPool,
-    cache: Arc<RwLock<HashMap<String, CacheEntry>>>,
 }
 
 impl Clone for RecipeDb {
     fn clone(&self) -> Self {
         Self {
             pool: self.pool.clone(),
-            cache: self.cache.clone(),
         }
     }
 }
@@ -44,11 +32,12 @@ impl RecipeDb {
         sqlx::migrate!().run(&pool).await?;
         info!("database initialized");
 
-        let db = Self {
-            pool,
-            cache: Arc::new(RwLock::new(HashMap::new())),
-        };
+        let db = Self { pool };
         Ok(db)
+    }
+
+    pub fn pool(&self) -> &sqlx::PgPool {
+        &self.pool
     }
 
     pub async fn enqueue_url(&self, url: &str) -> Result<String> {
@@ -218,117 +207,6 @@ impl RecipeDb {
                 publication: r.publication.unwrap_or_default(),
             }
         }))
-    }
-
-    pub async fn search(&self, query: &str, limit: i32, offset: i32) -> Result<SearchResults> {
-        if query.len() < 2 {
-            return Ok(SearchResults {
-                hits: Vec::new(),
-                total: 0,
-                offset,
-                limit,
-            });
-        }
-
-        let cache_key = format!("{}:{}:{}", query, limit, offset);
-        {
-            let cache = self.cache.read().await;
-            if let Some(entry) = cache.get(&cache_key)
-                && entry.at.elapsed() < Duration::from_secs(30)
-            {
-                return Ok(entry.hits.clone());
-            }
-        }
-
-        let pattern = format!("%{}%", query);
-        let mut tx = self.pool.begin().await?;
-
-        sqlx::query!("SELECT set_limit(0.18)")
-            .fetch_optional(&mut *tx)
-            .await?;
-
-        let rows = sqlx::query!(
-            r#"
-            WITH matched AS (
-                SELECT url FROM recipes
-                WHERE search_vector @@ websearch_to_tsquery('english', $1)
-                UNION
-                SELECT url FROM recipes WHERE title ILIKE $3
-                UNION
-                SELECT url FROM recipes WHERE ingredients ILIKE $3
-                UNION
-                SELECT url FROM recipes WHERE title % $1
-            )
-            SELECT r.url, r.title, r.total_time, r.ingredients, r.instructions, r.image, r.publication,
-                   COALESCE(ts_rank(r.search_vector, websearch_to_tsquery('english', $1)), 0)
-                   + CASE WHEN r.title ILIKE $3 THEN 0.3 ELSE 0 END
-                   + CASE WHEN r.ingredients ILIKE $3 THEN 0.1 ELSE 0 END
-                   + GREATEST(word_similarity($1, COALESCE(r.title, '')), 0) * 0.4
-                   + GREATEST(word_similarity($1, COALESCE(r.ingredients, '')), 0) * 0.15 AS score,
-                   COUNT(*) OVER() AS total
-            FROM recipes r
-            JOIN matched m ON r.url = m.url
-            ORDER BY score DESC
-            LIMIT $2 OFFSET $4
-            "#,
-            query,
-            i64::from(limit),
-            pattern,
-            i64::from(offset),
-        )
-        .fetch_all(&mut *tx)
-        .await?;
-
-        tx.commit().await?;
-
-        let total: i64 = rows.first().and_then(|r| r.total).unwrap_or(0);
-
-        let hits: Vec<SearchHit> = rows
-            .into_iter()
-            .map(|r| {
-                let ingredients_str = r.ingredients.unwrap_or_default();
-                let instructions_str = r.instructions.unwrap_or_default();
-
-                let ingredients: Vec<String> =
-                    serde_json::from_str(&ingredients_str).unwrap_or_default();
-                let instructions: Vec<String> =
-                    serde_json::from_str(&instructions_str).unwrap_or_default();
-
-                SearchHit {
-                    recipe: Recipe {
-                        url: r.url,
-                        title: r.title.unwrap_or_default(),
-                        total_time: r.total_time.unwrap_or(0),
-                        ingredients,
-                        instructions,
-                        image: r.image.unwrap_or_default(),
-                        publication: r.publication.unwrap_or_default(),
-                    },
-                    score: r.score.unwrap_or(0.0),
-                }
-            })
-            .collect();
-
-        let results = SearchResults {
-            hits: hits.clone(),
-            total,
-            offset,
-            limit,
-        };
-
-        {
-            let mut cache = self.cache.write().await;
-            cache.retain(|_, e| e.at.elapsed() < Duration::from_secs(30));
-            cache.insert(
-                cache_key,
-                CacheEntry {
-                    hits: results.clone(),
-                    at: Instant::now(),
-                },
-            );
-        }
-
-        Ok(results)
     }
 
     pub async fn queue_stats(&self) -> Result<QueueStats> {
@@ -584,113 +462,6 @@ mod tests {
         let result = db.get_recipe("https://example.com/test").await.unwrap();
         assert!(result.is_some());
         assert_eq!(result.unwrap().title, "New");
-    }
-
-    #[tokio::test]
-    async fn test_search_finds_matching_recipe() {
-        let _lock = db_mutex().lock().await;
-        let db = setup_db().await;
-        let recipe = ScrapedRecipe {
-            title: "Chicken Parmesan".to_string(),
-            ..sample_recipe("https://example.com/test")
-        };
-        db.save_recipe(&recipe).await.unwrap();
-
-        let results = db.search("chicken", 20, 0).await.unwrap();
-        assert!(!results.hits.is_empty());
-        assert_eq!(results.hits[0].recipe.title, "Chicken Parmesan");
-        assert!(results.total > 0);
-    }
-
-    #[tokio::test]
-    async fn test_search_returns_empty_for_no_match() {
-        let _lock = db_mutex().lock().await;
-        let db = setup_db().await;
-        let recipe = ScrapedRecipe {
-            title: "Chicken Parmesan".to_string(),
-            ..sample_recipe("https://example.com/test")
-        };
-        db.save_recipe(&recipe).await.unwrap();
-
-        let results = db.search("zucchini", 20, 0).await.unwrap();
-        assert!(results.hits.is_empty());
-        assert_eq!(results.total, 0);
-    }
-
-    #[tokio::test]
-    async fn test_search_respects_limit() {
-        let _lock = db_mutex().lock().await;
-        let db = setup_db().await;
-        for i in 0..5 {
-            let recipe = ScrapedRecipe {
-                url: format!("https://example.com/test{i}"),
-                title: format!("Chicken Dish {i}"),
-                ..sample_recipe("https://example.com/test0")
-            };
-            db.save_recipe(&recipe).await.unwrap();
-        }
-
-        let results = db.search("chicken", 2, 0).await.unwrap();
-        assert_eq!(results.hits.len(), 2);
-        assert_eq!(results.total, 5);
-    }
-
-    #[tokio::test]
-    async fn test_fts_incremental_updates_after_save() {
-        let _lock = db_mutex().lock().await;
-        let db = setup_db().await;
-        let alpha = ScrapedRecipe {
-            url: "https://example.com/alpha".to_string(),
-            title: "Alpha Dish".to_string(),
-            ..sample_recipe("https://example.com/test")
-        };
-        db.save_recipe(&alpha).await.unwrap();
-        assert_eq!(db.search("alpha", 20, 0).await.unwrap().hits.len(), 1);
-
-        let beta = ScrapedRecipe {
-            url: "https://example.com/beta".to_string(),
-            title: "Beta Dish".to_string(),
-            ..sample_recipe("https://example.com/test")
-        };
-        db.save_recipe(&beta).await.unwrap();
-        assert_eq!(db.search("beta", 20, 0).await.unwrap().hits.len(), 1);
-        assert_eq!(db.search("alpha", 20, 0).await.unwrap().hits.len(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_search_partial_word_match() {
-        let _lock = db_mutex().lock().await;
-        let db = setup_db().await;
-        let recipe = ScrapedRecipe {
-            title: "Chicken Parmesan".to_string(),
-            ..sample_recipe("https://example.com/test")
-        };
-        db.save_recipe(&recipe).await.unwrap();
-
-        let results = db.search("chick", 20, 0).await.unwrap();
-        assert!(
-            !results.hits.is_empty(),
-            "partial word 'chick' should match 'Chicken'"
-        );
-        assert_eq!(results.hits[0].recipe.title, "Chicken Parmesan");
-    }
-
-    #[tokio::test]
-    async fn test_search_misspelled_word() {
-        let _lock = db_mutex().lock().await;
-        let db = setup_db().await;
-        let recipe = ScrapedRecipe {
-            title: "Chicken Parmesan".to_string(),
-            ..sample_recipe("https://example.com/test")
-        };
-        db.save_recipe(&recipe).await.unwrap();
-
-        let results = db.search("chikcen", 20, 0).await.unwrap();
-        assert!(
-            !results.hits.is_empty(),
-            "misspelled 'chikcen' should match 'Chicken' via trigram similarity"
-        );
-        assert_eq!(results.hits[0].recipe.title, "Chicken Parmesan");
     }
 
     #[tokio::test]

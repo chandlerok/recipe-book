@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use clap::Parser;
 use tokio_cron_scheduler::{Job, JobScheduler};
@@ -7,6 +9,7 @@ mod crawler;
 mod db;
 mod models;
 mod scraper;
+mod search;
 mod server;
 
 #[derive(Parser)]
@@ -41,6 +44,8 @@ async fn main() -> Result<()> {
 
     let db = db::RecipeDb::new(&cli.pg_dsn).await?;
 
+    let search_index = Arc::new(search::RecipeIndex::build(db.pool().clone()).await?);
+
     let crawler_client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()?;
@@ -68,5 +73,5 @@ async fn main() -> Result<()> {
 
     sched.start().await?;
 
-    server::serve(cli.host, cli.port, cli.pg_dsn, cli.workers, cli.web_dist).await
+    server::serve(cli.host, cli.port, cli.pg_dsn, cli.workers, cli.web_dist, search_index).await
 }

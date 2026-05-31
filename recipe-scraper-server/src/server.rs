@@ -30,7 +30,7 @@ use crate::models::{
     QueueStats, Recipe, RecipeQuery, ScrapeRequest, SearchHit, SearchParams, SearchResults,
 };
 use crate::scraper::{self, ProxyPool};
-
+use crate::search::RecipeIndex;
 pub const SCRAPE_DELAY: Duration = Duration::from_secs(2);
 
 pub struct DomainRateLimiter {
@@ -66,6 +66,7 @@ impl DomainRateLimiter {
 #[allow(dead_code)]
 pub struct AppState {
     pub db: RecipeDb,
+    pub search_index: Arc<RecipeIndex>,
     pub scrape_client: wreq::Client,
     pub rate_limiter: Arc<DomainRateLimiter>,
     pub proxy_pool: Option<Arc<ProxyPool>>,
@@ -118,19 +119,9 @@ async fn search_recipes_handler(
     let limit = params.limit.unwrap_or(20).clamp(1, 100);
     let offset = params.offset.unwrap_or(0).max(0);
 
-    match state.db.search(params.q.trim(), limit, offset).await {
-        Ok(results) => {
-            info!("search: query={} total={}", params.q, results.total);
-            (StatusCode::OK, serde_json::to_string(&results).unwrap())
-        }
-        Err(e) => {
-            warn!("search error: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                json!({"error": e.to_string()}).to_string(),
-            )
-        }
-    }
+    let results = state.search_index.search(params.q.trim(), limit, offset).await;
+    info!("search: query={} total={}", params.q, results.total);
+    (StatusCode::OK, serde_json::to_string(&results).unwrap())
 }
 
 #[utoipa::path(
@@ -228,6 +219,7 @@ async fn queue_status_handler(State(state): State<AppState>) -> impl IntoRespons
 
 async fn run_worker(
     db: RecipeDb,
+    search_index: Arc<RecipeIndex>,
     client: wreq::Client,
     rate_limiter: Arc<DomainRateLimiter>,
     shutdown: Arc<AtomicBool>,
@@ -249,10 +241,15 @@ async fn run_worker(
 
                 match scraper::scrape_recipe(&client, &url, proxy).await {
                     Ok(recipe) => match db.save_recipe_and_mark_done(&recipe, job_id).await {
-                        Ok(_) => info!(
-                            "job done: worker_id={worker_id} job_id={job_id} url={url} title={}",
-                            recipe.title
-                        ),
+                        Ok(_) => {
+                            if let Err(e) = search_index.upsert(&recipe) {
+                                warn!("failed to update search index: url={url} error={e}");
+                            }
+                            info!(
+                                "job done: worker_id={worker_id} job_id={job_id} url={url} title={}",
+                                recipe.title
+                            );
+                        }
                         Err(e) => warn!(
                             "failed to save and mark done: url={url} job_id={job_id} error={e}"
                         ),
@@ -286,6 +283,7 @@ pub async fn serve(
     dsn: String,
     workers: usize,
     web_dist: String,
+    search_index: Arc<RecipeIndex>,
 ) -> Result<()> {
     let db = RecipeDb::new(&dsn).await?;
     let shutdown = Arc::new(AtomicBool::new(false));
@@ -307,17 +305,19 @@ pub async fn serve(
 
     for i in 0..workers {
         let db = db.clone();
+        let search_index = search_index.clone();
         let client = scrape_client.clone();
         let rate_limiter = rate_limiter.clone();
         let shutdown = shutdown.clone();
         let proxy_pool = proxy_pool.clone();
         tokio::spawn(async move {
-            run_worker(db, client, rate_limiter, shutdown, proxy_pool, i + 1).await;
+            run_worker(db, search_index, client, rate_limiter, shutdown, proxy_pool, i + 1).await;
         });
     }
 
     let state = AppState {
         db: db.clone(),
+        search_index,
         scrape_client,
         rate_limiter,
         proxy_pool,
