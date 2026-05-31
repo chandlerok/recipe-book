@@ -8,6 +8,7 @@ mod db;
 mod models;
 mod scraper;
 mod server;
+mod templates;
 
 #[derive(Parser)]
 #[command(name = "recipe-scraper-server")]
@@ -24,8 +25,6 @@ struct Cli {
     #[arg(long, env = "WORKERS", default_value = "5")]
     workers: usize,
 
-    #[arg(long, env = "WEB_DIST", default_value = "../recipe-scraper-web/dist")]
-    web_dist: String,
 }
 
 #[tokio::main]
@@ -68,5 +67,5 @@ async fn main() -> Result<()> {
 
     sched.start().await?;
 
-    server::serve(cli.host, cli.port, cli.pg_dsn, cli.workers, cli.web_dist).await
+    server::serve(cli.host, cli.port, cli.pg_dsn, cli.workers).await
 }

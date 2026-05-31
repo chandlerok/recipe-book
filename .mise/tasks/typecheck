@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-#MISE description="Type-check all code (Rust + TypeScript)"
-#MISE depends=["typecheck-rs", "typecheck-web"]
+#MISE description="Type-check Rust code"
+#MISE depends=["typecheck-rs"]
 true

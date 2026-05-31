@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-#MISE description="Lint TypeScript code with tsc"
-#MISE dir="recipe-scraper-web"
-#MISE depends=["format-web"]
-bun run typecheck

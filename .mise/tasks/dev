@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-#MISE description="Run both server and frontend in development mode"
-#MISE depends=["dev-server", "dev-web"]
-true
+#MISE description="Run the server in development mode"
+#MISE dir="recipe-scraper-server"
+cargo run

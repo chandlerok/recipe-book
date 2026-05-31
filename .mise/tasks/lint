@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-#MISE description="Lint all code (Rust + TypeScript)"
-#MISE depends=["lint-rs", "lint-web"]
+#MISE description="Lint Rust code"
+#MISE depends=["lint-rs"]
 true

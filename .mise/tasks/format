@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-#MISE description="Format all code (Rust + TypeScript)"
-#MISE depends=["format-rs", "format-web"]
+#MISE description="Format Rust code"
+#MISE depends=["format-rs"]
 true

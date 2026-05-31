@@ -1,0 +1,30 @@
+<div class="modal-header">
+  <h2 class="modal-title">{{ recipe.title }}</h2>
+  <button class="modal-close">&times;</button>
+</div>
+
+{% if !recipe.image.is_empty() %}
+<img src="{{ recipe.image }}" alt="" class="modal-hero">
+{% else %}
+<div class="modal-hero-placeholder">Image placeholder</div>
+{% endif %}
+
+{% if recipe.total_time > 0 %}
+<p class="modal-time">Total time: {{ recipe.total_time }} min</p>
+{% endif %}
+
+<h3 class="modal-section-heading">Ingredients</h3>
+<ul class="modal-list">
+{% for ing in recipe.ingredients %}
+  <li>{{ ing }}</li>
+{% endfor %}
+</ul>
+
+<h3 class="modal-section-heading">Instructions</h3>
+<ol class="modal-list">
+{% for step in recipe.instructions %}
+  <li>{{ step }}</li>
+{% endfor %}
+</ol>
+
+<a href="{{ recipe.url }}" target="_blank" rel="noopener noreferrer" class="modal-link">View original recipe &#8599;</a>

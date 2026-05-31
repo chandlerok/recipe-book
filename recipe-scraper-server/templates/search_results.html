@@ -1,0 +1,36 @@
+<p class="results-header">{{ total }} recipes found</p>
+<div class="card-list">
+{% for hit in results %}
+  <div class="card"
+       hx-get="/recipe?url={{ hit.url_encoded }}"
+       hx-target="#modal-content"
+       _="on htmx:afterRequest add .modal--open to #modal">
+    {% if !hit.image.is_empty() %}
+    <img src="{{ hit.image }}" alt="" class="card-thumb">
+    {% endif %}
+    <div class="card-body">
+      <span class="card-title">{{ hit.title }}</span>
+      {% if hit.total_time > 0 %}
+      <p class="card-time">{{ hit.total_time }} min</p>
+      {% endif %}
+    </div>
+  </div>
+{% endfor %}
+</div>
+{% if total > limit %}
+<div class="pagination">
+  {% if offset > 0 %}
+  <button class="btn"
+          hx-get="/search?q={{ query }}&limit={{ limit }}&offset={{ offset - limit }}"
+          hx-target="#results"
+          hx-push-url="true">&#9664; Prev</button>
+  {% endif %}
+  <span class="page-info">Page {{ (offset / limit) + 1 }} of {{ (total + limit - 1) / limit }} ({{ total }} results)</span>
+  {% if offset + limit < total %}
+  <button class="btn"
+          hx-get="/search?q={{ query }}&limit={{ limit }}&offset={{ offset + limit }}"
+          hx-target="#results"
+          hx-push-url="true">Next &#9654;</button>
+  {% endif %}
+</div>
+{% endif %}
