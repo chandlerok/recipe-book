@@ -1,11 +1,14 @@
 use anyhow::{Context, Result};
 use sqlx::PgPool;
 use tantivy::{
-    Index, IndexReader, ReloadPolicy,
-    collector::{TopDocs, Count},
-    query::{BooleanQuery, BoostQuery, FuzzyTermQuery, Occur, PhrasePrefixQuery, Query, QueryParser, TermQuery},
+    Index, IndexReader, ReloadPolicy, Term,
+    collector::{Count, TopDocs},
+    doc,
+    query::{
+        BooleanQuery, BoostQuery, FuzzyTermQuery, Occur, PhrasePrefixQuery, Query, QueryParser,
+        TermQuery,
+    },
     schema::*,
-    doc, Term,
 };
 use tracing::info;
 
@@ -218,7 +221,10 @@ impl RecipeIndex {
         for pub_name in &["Bon Appétit", "NYT Cooking", "Epicurious"] {
             let term = Term::from_field_text(self.publication, pub_name);
             let term_query = TermQuery::new(term, IndexRecordOption::Basic);
-            outer.push((Occur::Should, Box::new(BoostQuery::new(Box::new(term_query), 0.3))));
+            outer.push((
+                Occur::Should,
+                Box::new(BoostQuery::new(Box::new(term_query), 0.3)),
+            ));
         }
 
         let bool_query = BooleanQuery::new(outer);
@@ -287,23 +293,35 @@ impl RecipeIndex {
         if words.len() <= 2 {
             let parser = QueryParser::for_index(&self.index, text_fields);
             if let Ok(parsed) = parser.parse_query(query_str) {
-                clauses.push((Occur::Should, Box::new(BoostQuery::new(Box::new(parsed), 2.0))));
+                clauses.push((
+                    Occur::Should,
+                    Box::new(BoostQuery::new(Box::new(parsed), 2.0)),
+                ));
             }
 
             // Prefix matching: "chick" matches "chicken", "chickpea", etc.
             for field in &[self.title, self.ingredients] {
                 let prefix = PhrasePrefixQuery::new(vec![Term::from_field_text(*field, query_str)]);
-                clauses.push((Occur::Should, Box::new(BoostQuery::new(Box::new(prefix), 1.5))));
+                clauses.push((
+                    Occur::Should,
+                    Box::new(BoostQuery::new(Box::new(prefix), 1.5)),
+                ));
             }
 
             // Deeper fuzzy matching for typos and partial words
             let fuzzy_title =
                 FuzzyTermQuery::new(Term::from_field_text(self.title, query_str), 2, true);
-            clauses.push((Occur::Should, Box::new(BoostQuery::new(Box::new(fuzzy_title), 0.5))));
+            clauses.push((
+                Occur::Should,
+                Box::new(BoostQuery::new(Box::new(fuzzy_title), 0.5)),
+            ));
 
             let fuzzy_ingredients =
                 FuzzyTermQuery::new(Term::from_field_text(self.ingredients, query_str), 2, true);
-            clauses.push((Occur::Should, Box::new(BoostQuery::new(Box::new(fuzzy_ingredients), 0.5))));
+            clauses.push((
+                Occur::Should,
+                Box::new(BoostQuery::new(Box::new(fuzzy_ingredients), 0.5)),
+            ));
         } else {
             let min_match = words.len() - 1;
             let combos = combinations(words.len(), min_match);
@@ -322,19 +340,17 @@ impl RecipeIndex {
                 clauses.push((Occur::Should, Box::new(BooleanQuery::new(combo_or))));
             }
 
-            let fuzzy_title = FuzzyTermQuery::new(
-                Term::from_field_text(self.title, query_str),
-                1,
-                true,
-            );
-            clauses.push((Occur::Should, Box::new(BoostQuery::new(Box::new(fuzzy_title), 0.3))));
+            for &word in &words {
+                for field in &[self.title, self.ingredients] {
+                    let prefix =
+                        PhrasePrefixQuery::new(vec![Term::from_field_text(*field, word)]);
+                    clauses.push((Occur::Should, Box::new(BoostQuery::new(Box::new(prefix), 0.5))));
 
-            let fuzzy_ingredients = FuzzyTermQuery::new(
-                Term::from_field_text(self.ingredients, query_str),
-                1,
-                true,
-            );
-            clauses.push((Occur::Should, Box::new(BoostQuery::new(Box::new(fuzzy_ingredients), 0.3))));
+                    let fuzzy =
+                        FuzzyTermQuery::new(Term::from_field_text(*field, word), 1, true);
+                    clauses.push((Occur::Should, Box::new(BoostQuery::new(Box::new(fuzzy), 0.3))));
+                }
+            }
         }
 
         clauses
