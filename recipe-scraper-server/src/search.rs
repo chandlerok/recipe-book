@@ -1,14 +1,14 @@
 use anyhow::{Context, Result};
 use sqlx::PgPool;
 use tantivy::{
-    Index, IndexReader, ReloadPolicy, Term,
-    collector::{Count, TopDocs},
-    doc,
+    Index, IndexReader, ReloadPolicy,
+    collector::{TopDocs, Count},
     query::{
         BooleanQuery, BoostQuery, FuzzyTermQuery, Occur, PhrasePrefixQuery, PhraseQuery, Query,
         QueryParser, TermQuery,
     },
     schema::*,
+    doc, Term,
 };
 use tracing::info;
 
@@ -49,32 +49,6 @@ fn term_in_fields(term_text: &str, fields: &[Field], edit: u8) -> Box<dyn Query>
         clauses.push((Occur::Should, Box::new(tq)));
     }
     Box::new(BooleanQuery::new(clauses))
-}
-
-fn combinations(n: usize, k: usize) -> Vec<Vec<usize>> {
-    if k == 0 || k > n {
-        return Vec::new();
-    }
-    let mut result = Vec::new();
-    let mut stack: Vec<usize> = (0..k).collect();
-    loop {
-        result.push(stack.clone());
-        let mut i = k;
-        for j in (0..k).rev() {
-            if stack[j] < j + n - k {
-                stack[j] += 1;
-                for l in j + 1..k {
-                    stack[l] = stack[l - 1] + 1;
-                }
-                i = j;
-                break;
-            }
-        }
-        if i == k {
-            break;
-        }
-    }
-    result
 }
 
 impl RecipeIndex {
@@ -213,18 +187,59 @@ impl RecipeIndex {
         let searcher = self.reader.searcher();
 
         let words: Vec<&str> = query_str.split_whitespace().collect();
-        let must_clauses = self.build_min_should_match(words, query_str);
-
-        // Publication boost (optional, on top of text match)
+        let text_fields = vec![self.title, self.ingredients, self.instructions];
         let mut outer: Vec<(Occur, Box<dyn Query>)> = Vec::new();
-        outer.push((Occur::Must, Box::new(BooleanQuery::new(must_clauses))));
+
+        if words.len() <= 2 {
+            // Short queries: OR filter permissive
+            let mut or_clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
+            let parser = QueryParser::for_index(&self.index, text_fields);
+            if let Ok(parsed) = parser.parse_query(query_str) {
+                or_clauses.push((Occur::Should, Box::new(BoostQuery::new(Box::new(parsed), 2.0))));
+            }
+            for field in &[self.title, self.ingredients] {
+                let prefix = PhrasePrefixQuery::new(vec![Term::from_field_text(*field, query_str)]);
+                or_clauses.push((Occur::Should, Box::new(BoostQuery::new(Box::new(prefix), 1.5))));
+            }
+            outer.push((Occur::Must, Box::new(BooleanQuery::new(or_clauses))));
+        } else {
+            // Long queries: every word must appear somewhere (AND filter)
+            let mut and_clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
+            for word in &words {
+                let wq = term_in_fields(word, &text_fields, 1);
+                and_clauses.push((Occur::Must, Box::new(wq)));
+            }
+            outer.push((Occur::Must, Box::new(BooleanQuery::new(and_clauses))));
+        }
+
+        // Score-only boosts (these don't affect filtering, only ranking)
+        if words.len() >= 2 {
+            // Per-word prefix boosts
+            for word in &words {
+                for field in &[self.title, self.ingredients] {
+                    let prefix = PhrasePrefixQuery::new(vec![Term::from_field_text(*field, word)]);
+                    outer.push((Occur::Should, Box::new(BoostQuery::new(Box::new(prefix), 0.3))));
+
+                    let fuzzy = FuzzyTermQuery::new(Term::from_field_text(*field, word), 2, true);
+                    outer.push((Occur::Should, Box::new(BoostQuery::new(Box::new(fuzzy), 0.15))));
+                }
+            }
+
+            // Phrase query: exact consecutive words in title get massive boost
+            let phrase_terms: Vec<(usize, Term)> = words
+                .iter()
+                .enumerate()
+                .map(|(i, w)| (i, Term::from_field_text(self.title, w)))
+                .collect();
+            let phrase = PhraseQuery::new_with_offset_and_slop(phrase_terms, 1);
+            outer.push((Occur::Should, Box::new(BoostQuery::new(Box::new(phrase), 5.0))));
+        }
+
+        // Publication boost
         for pub_name in &["Bon Appétit", "NYT Cooking", "Epicurious"] {
             let term = Term::from_field_text(self.publication, pub_name);
             let term_query = TermQuery::new(term, IndexRecordOption::Basic);
-            outer.push((
-                Occur::Should,
-                Box::new(BoostQuery::new(Box::new(term_query), 0.3)),
-            ));
+            outer.push((Occur::Should, Box::new(BoostQuery::new(Box::new(term_query), 0.3))));
         }
 
         let bool_query = BooleanQuery::new(outer);
@@ -280,113 +295,6 @@ impl RecipeIndex {
             offset,
             limit,
         }
-    }
-
-    fn build_min_should_match(
-        &self,
-        words: Vec<&str>,
-        query_str: &str,
-    ) -> Vec<(Occur, Box<dyn Query>)> {
-        let mut clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
-        let text_fields = vec![self.title, self.ingredients, self.instructions];
-
-        if words.len() <= 2 {
-            let parser = QueryParser::for_index(&self.index, text_fields);
-            if let Ok(parsed) = parser.parse_query(query_str) {
-                clauses.push((
-                    Occur::Should,
-                    Box::new(BoostQuery::new(Box::new(parsed), 2.0)),
-                ));
-            }
-
-            // Prefix matching: "chick" matches "chicken", "chickpea", etc.
-            for field in &[self.title, self.ingredients] {
-                let prefix = PhrasePrefixQuery::new(vec![Term::from_field_text(*field, query_str)]);
-                clauses.push((
-                    Occur::Should,
-                    Box::new(BoostQuery::new(Box::new(prefix), 1.5)),
-                ));
-            }
-
-            // Exact phrase match in title — heavily boosts recipes where query
-            // words appear consecutively, so "french onion soup" beats "french
-            // onion cabbage soup".
-            if words.len() >= 2 {
-                let phrase_terms: Vec<(usize, Term)> = words
-                    .iter()
-                    .enumerate()
-                    .map(|(i, w)| (i, Term::from_field_text(self.title, w)))
-                    .collect();
-                let phrase = PhraseQuery::new_with_offset_and_slop(phrase_terms, 1);
-                clauses.push((
-                    Occur::Should,
-                    Box::new(BoostQuery::new(Box::new(phrase), 5.0)),
-                ));
-            }
-
-            // Deeper fuzzy matching for typos and partial words
-            let fuzzy_title =
-                FuzzyTermQuery::new(Term::from_field_text(self.title, query_str), 2, true);
-            clauses.push((
-                Occur::Should,
-                Box::new(BoostQuery::new(Box::new(fuzzy_title), 0.5)),
-            ));
-
-            let fuzzy_ingredients =
-                FuzzyTermQuery::new(Term::from_field_text(self.ingredients, query_str), 2, true);
-            clauses.push((
-                Occur::Should,
-                Box::new(BoostQuery::new(Box::new(fuzzy_ingredients), 0.5)),
-            ));
-        } else {
-            let min_match = words.len() - 1;
-            let combos = combinations(words.len(), min_match);
-
-            if !combos.is_empty() {
-                let mut combo_or: Vec<(Occur, Box<dyn Query>)> = Vec::new();
-                for combo in &combos {
-                    let mut combo_and: Vec<(Occur, Box<dyn Query>)> = Vec::new();
-                    for &idx in combo {
-                        let wq = term_in_fields(words[idx], &text_fields, 0);
-                        let boosted = BoostQuery::new(wq, 3.0);
-                        combo_and.push((Occur::Must, Box::new(boosted)));
-                    }
-                    combo_or.push((Occur::Should, Box::new(BooleanQuery::new(combo_and))));
-                }
-                clauses.push((Occur::Should, Box::new(BooleanQuery::new(combo_or))));
-            }
-
-            for &word in &words {
-                for field in &[self.title, self.ingredients] {
-                    let prefix = PhrasePrefixQuery::new(vec![Term::from_field_text(*field, word)]);
-                    clauses.push((
-                        Occur::Should,
-                        Box::new(BoostQuery::new(Box::new(prefix), 0.3)),
-                    ));
-
-                    let fuzzy = FuzzyTermQuery::new(Term::from_field_text(*field, word), 1, true);
-                    clauses.push((
-                        Occur::Should,
-                        Box::new(BoostQuery::new(Box::new(fuzzy), 0.15)),
-                    ));
-                }
-            }
-
-            // Exact phrase match in title — heavily favors recipes where the
-            // query words appear consecutively rather than scattered.
-            let phrase_terms: Vec<(usize, Term)> = words
-                .iter()
-                .enumerate()
-                .map(|(i, w)| (i, Term::from_field_text(self.title, w)))
-                .collect();
-            let phrase = PhraseQuery::new_with_offset_and_slop(phrase_terms, 1);
-            clauses.push((
-                Occur::Should,
-                Box::new(BoostQuery::new(Box::new(phrase), 5.0)),
-            ));
-        }
-
-        clauses
     }
 
     async fn fetch_recipes(&self, urls: &[String]) -> Result<Vec<Recipe>> {

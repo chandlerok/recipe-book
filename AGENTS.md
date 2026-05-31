@@ -46,13 +46,13 @@ Search is implemented in `src/search.rs` using tantivy's BM25 scoring.
 
 **Query structure** (nested boolean):
 1. **Must group** — at least one text/fuzzy clause must match (provides relevance floor):
-   - Multi-field full-text query with AND semantics (`set_conjunction_by_default`): all query terms must appear across title/ingredients/instructions, boosted 2x. AND only applies for queries with 3+ words — short queries (1-2 words) use OR
-   - Exact title match bonus (edit distance 0, boost 0.5)
-   - Prefix phrase queries on title and ingredients — "chick" matches "chicken", "chickpea" (boost 1.5)
-   - Fuzzy title fallback (edit distance 2, deboosted 0.5) — catches partial words and minor typos
-   - Fuzzy ingredients fallback (edit distance 2, deboosted 0.5)
-   - For 3+ word queries: minimum-should-match requiring N−1 of N words to appear. Each word must match exactly (edit distance 0) in at least one text field, boosted 3.0 per matching combination. Per-word prefix (0.3) and fuzzy (0.15) fallbacks catch partial words.
-2. **Should** — publication boost for known authoritative sites (Bon Appétit, NYT Cooking, Epicurious, boost 0.3)
+   - **Short queries** (1-2 words): OR across all fields permissive — the QueryParser with default occurrence catches any matching term
+   - **Long queries** (3+ words): AND filter — every word must appear in at least one of title/ingredients/instructions. Each word uses fuzzy matching (edit distance 1) for typo tolerance, so "sou" still matches "soup".
+2. **Should** — score-only boosts that don't affect filtering:
+   - Per-word prefix phrase queries (boost 0.3)
+   - Per-word fuzzy queries edit distance 2 (boost 0.15)
+   - Exact phrase query in title with slop 1 (boost 5.0) — heavily favors consecutive word matches, so "French Onion Soup" beats "French Onion Cabbage Soup"
+   - Publication boost for known sites (Bon Appétit, NYT Cooking, Epicurious, boost 0.3)
 
 **Result fetching**: After the tantivy search returns matching URLs, full recipe data (ingredients/instructions as arrays) is fetched from PostgreSQL via `WHERE url IN (...)` to populate the response.
 
