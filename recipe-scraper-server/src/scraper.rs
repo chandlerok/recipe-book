@@ -82,6 +82,55 @@ pub struct ScrapedRecipe {
     pub ingredients: Vec<String>,
     pub instructions: Vec<String>,
     pub image: String,
+    pub publication: String,
+}
+
+pub fn extract_publication(url: &str) -> String {
+    let domain = match Url::parse(url) {
+        Ok(parsed) => parsed.host_str().map(|h| h.to_string()).unwrap_or_default(),
+        Err(_) => return String::new(),
+    };
+
+    let cleaned = domain
+        .trim_start_matches("www.")
+        .trim_start_matches("m.")
+        .to_string();
+
+    let parts: Vec<&str> = cleaned.split('.').collect();
+    let name_part = parts.first().map(|s| s.to_string()).unwrap_or(cleaned);
+
+    let name = name_part.replace('-', " ").replace('_', " ");
+
+    let words: Vec<String> = name.split_whitespace()
+        .map(|w| {
+            let mut c = w.chars();
+            match c.next() {
+                None => String::new(),
+                Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+            }
+        })
+        .collect();
+
+    let result = words.join(" ");
+
+    match result.as_str() {
+        "Seriouseats" => "Serious Eats".to_string(),
+        "Cooking" => "NYT Cooking".to_string(),
+        "Bonappetit" | "Bon Appétit" => "Bon Appétit".to_string(),
+        "Allrecipes" => "Allrecipes".to_string(),
+        "Foodnetwork" => "Food Network".to_string(),
+        "Simplyrecipes" => "Simply Recipes".to_string(),
+        "Pinchofyum" => "Pinch of Yum".to_string(),
+        "Halfbakedharvest" => "Half Baked Harvest".to_string(),
+        "Budgetbytes" => "Budget Bytes".to_string(),
+        "Cookieandkate" => "Cookie and Kate".to_string(),
+        "Food52" => "Food52".to_string(),
+        "Loveandlemons" => "Love and Lemons".to_string(),
+        "Minimalistbaker" => "Minimalist Baker".to_string(),
+        "Recipetineats" => "RecipeTin Eats".to_string(),
+        "Tasteofhome" => "Taste of Home".to_string(),
+        _ => result,
+    }
 }
 
 fn is_retryable_status(status: wreq::StatusCode) -> bool {
@@ -236,6 +285,7 @@ pub fn parse_recipe(html: &str, url: &str) -> Result<ScrapedRecipe> {
         ingredients,
         instructions,
         image,
+        publication: extract_publication(url),
     })
 }
 
@@ -351,6 +401,7 @@ mod tests {
         assert_eq!(recipe.ingredients, vec!["item1", "item2"]);
         assert_eq!(recipe.instructions, vec!["step 1", "step 2"]);
         assert_eq!(recipe.image, "https://example.com/image.jpg");
+        assert_eq!(recipe.publication, "Example");
     }
 
     #[test]

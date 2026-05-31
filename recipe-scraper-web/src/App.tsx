@@ -7,6 +7,37 @@ interface Recipe {
   ingredients: string[];
   instructions: string[];
   image: string;
+  publication: string;
+}
+
+const LOGO_COLORS = [
+  "#C867B9",
+  "#E8845B",
+  "#4A9E6B",
+  "#5B8DE8",
+  "#E8C84A",
+  "#E85B5B",
+  "#5BE8C8",
+  "#C85BE8",
+  "#E8A85B",
+  "#5BC8E8",
+];
+
+function publicationColor(pub: string): string {
+  let hash = 0;
+  for (let i = 0; i < pub.length; i++) {
+    hash = pub.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return LOGO_COLORS[Math.abs(hash) % LOGO_COLORS.length];
+}
+
+function faviconUrl(url: string): string {
+  try {
+    const domain = new URL(url).hostname;
+    return `https://www.google.com/s2/favicons?domain=${domain}&sz=16`;
+  } catch {
+    return "";
+  }
 }
 
 interface SearchHit {
@@ -166,13 +197,30 @@ const App = () => {
                 >
                   {hit.recipe.title}
                 </span>
-                {hit.recipe.total_time > 0 && (
-                  <p
-                    style={`margin: 8px 0 0; font-family: ${FONTS.mono}; font-size: 13.6px; color: ${COLORS.textMuted};`}
-                  >
-                    {hit.recipe.total_time} min
-                  </p>
-                )}
+                <div style="margin: 8px 0 0; display: flex; align-items: center; gap: 8px;">
+                  <Show when={hit.recipe.publication}>
+                    <span
+                      style={`display: inline-flex; align-items: center; gap: 4px; background: #2A1F30; border-radius: 100px; padding: 2px 8px; font-family: ${FONTS.mono}; font-size: 12px; color: ${COLORS.textPlaceholder};`}
+                    >
+                      <img
+                        src={faviconUrl(hit.recipe.url)}
+                        alt=""
+                        style="width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0;"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                      {hit.recipe.publication}
+                    </span>
+                  </Show>
+                  {hit.recipe.total_time > 0 && (
+                    <span
+                      style={`font-family: ${FONTS.mono}; font-size: 13.6px; color: ${COLORS.textMuted};`}
+                    >
+                      {hit.recipe.total_time} min
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           ))}

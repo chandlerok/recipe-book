@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT url, title, total_time, ingredients, instructions, image\n            FROM recipes WHERE url = $1\n            ",
+  "query": "\n            SELECT url, title, total_time, ingredients, instructions, image, publication\n            FROM recipes WHERE url = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -32,6 +32,11 @@
         "ordinal": 5,
         "name": "image",
         "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "publication",
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -45,8 +50,9 @@
       true,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "1e444633bc16906f2d1c4dcdad4448932515ccae401b6d1a1fb48f96ff5b54f5"
+  "hash": "e981ec368969c9cdb6be1a5b80bd972e0c39e6e5e8d99321e0dbc9f73c8d1c5a"
 }
