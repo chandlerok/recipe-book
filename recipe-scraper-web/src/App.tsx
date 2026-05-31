@@ -70,6 +70,21 @@ async function searchRecipes(
   return res.json();
 }
 
+function pageNumbers(current: number, total: number): (number | "...")[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  const pages: (number | "...")[] = [];
+  pages.push(1);
+  if (current > 3) pages.push("...");
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  for (let i = start; i <= end; i++) pages.push(i);
+  if (current < total - 2) pages.push("...");
+  pages.push(total);
+  return pages;
+}
+
 const COLORS = {
   bg: "#15101D",
   surface: "#1E1524",
@@ -122,6 +137,8 @@ const App = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  let searchInput!: HTMLInputElement;
+
   const [selected, setSelected] = createSignal<Recipe | null>(null);
   const [animatingRecipe, setAnimatingRecipe] = createSignal<Recipe | null>(
     null,
@@ -156,8 +173,19 @@ const App = () => {
   const panelRevealed = () => panelPhase() !== "closed";
   const isClosing = () => panelPhase() === "closing";
 
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "/" && document.activeElement !== searchInput) {
+      e.preventDefault();
+      searchInput?.focus();
+    }
+    if (e.key === "Escape" && panelRevealed()) {
+      setSelected(null);
+    }
+  };
+
   return (
     <div
+      onKeyDown={onKeyDown}
       style={`max-width: 640px; margin: 0 auto; padding: 2rem 1rem; min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column;`}
     >
       <div
@@ -170,14 +198,28 @@ const App = () => {
         Recipe Search
       </h1>
 
-      <input
-        type="text"
-        placeholder="Search recipes..."
-        value={query()}
-        onInput={onInput}
-        class="search-input"
-        style={`width: 100%; padding: 12px; font-family: ${FONTS.mono}; font-size: 16px; background: ${COLORS.input}; border: 1px solid ${COLORS.border}; border-radius: 8px; box-sizing: border-box; color: #fff; outline: none; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); flex-shrink: 0; transition: box-shadow 0.15s ease;`}
-      />
+      <div style="position: relative; flex-shrink: 0;">
+        <input
+          type="text"
+          placeholder="Search recipes..."
+          value={query()}
+          onInput={onInput}
+          ref={searchInput!}
+          class="search-input"
+          style={`width: 100%; padding: 12px; font-family: ${FONTS.mono}; font-size: 16px; background: ${COLORS.input}; border: 1px solid ${COLORS.border}; border-radius: 8px; box-sizing: border-box; color: #fff; outline: none; box-shadow: 4px 4px 4px rgba(0,0,0,0.2); transition: box-shadow 0.15s ease; padding-right: ${query().trim() ? "36px" : "12px"};`}
+        />
+        <Show when={query().trim() !== ""}>
+          <button
+            onClick={() => {
+              setQuery("");
+              setOffset(0);
+            }}
+            style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #666; cursor: pointer; font-size: 18px; padding: 0; line-height: 1;"
+          >
+            ✕
+          </button>
+        </Show>
+      </div>
 
       <Show when={results.loading && query().trim() !== ""}>
         <div style="display: flex; flex-direction: column; gap: 16px; padding-top: 16px;">
@@ -229,12 +271,13 @@ const App = () => {
                 <img
                   src={hit.recipe.image}
                   alt={hit.recipe.title}
+                  loading="lazy"
                   style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; flex-shrink: 0;"
                 />
               )}
-              <div style="padding: 16px 0;">
+              <div style="padding: 16px 0; min-width: 0;">
                 <span
-                  style={`font-family: ${FONTS.title}; font-size: 16px; font-weight: 400; color: ${COLORS.accentSecondary};`}
+                  style={`font-family: ${FONTS.title}; font-size: 16px; font-weight: 400; color: ${COLORS.accentSecondary}; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;`}
                 >
                   {hit.recipe.title}
                 </span>
@@ -268,26 +311,45 @@ const App = () => {
         </div>
 
         <div
-          style={`display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 16px;`}
+          style={`display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 16px; flex-wrap: wrap;`}
         >
           <button
             onClick={() => goToPage(currentPage() - 1)}
             disabled={currentPage() <= 1}
             style={currentPage() <= 1 ? btnDisabled : btnStyle}
           >
-            ◀ Prev
+            ◀
           </button>
-          <span
-            style={`font-family: ${FONTS.mono}; font-size: 14.4px; color: ${COLORS.textInfo};`}
-          >
-            Page {currentPage()} of {pageCount()} ({total()} results)
-          </span>
+
+          <For each={pageNumbers(currentPage(), pageCount())}>
+            {(page) =>
+              page === "..." ? (
+                <span
+                  style={`font-family: ${FONTS.mono}; font-size: 12px; color: ${COLORS.textInfo}; padding: 0 2px;`}
+                >
+                  …
+                </span>
+              ) : (
+                <button
+                  onClick={() => goToPage(page as number)}
+                  style={
+                    page === currentPage()
+                      ? `${btnStyle} background: ${COLORS.accentSecondary}; color: #15101D; border-color: ${COLORS.accentSecondary};`
+                      : btnStyle
+                  }
+                >
+                  {page}
+                </button>
+              )
+            }
+          </For>
+
           <button
             onClick={() => goToPage(currentPage() + 1)}
             disabled={currentPage() >= pageCount()}
             style={currentPage() >= pageCount() ? btnDisabled : btnStyle}
           >
-            Next ▶
+            ▶
           </button>
         </div>
       </Show>
@@ -401,7 +463,15 @@ const App = () => {
                 <img
                   src={recipe.image}
                   alt={recipe.title}
+                  loading="lazy"
                   style={`width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 20px; background: ${COLORS.surface}; border: 1px solid ${COLORS.border}; box-shadow: 4px 4px 4px rgba(0,0,0,0.2);`}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = "none";
+                    (e.target as HTMLImageElement).insertAdjacentHTML(
+                      "afterend",
+                      `<div style="width:100%;height:200px;border-radius:8px;margin-bottom:20px;background:#1E1524;border:1px solid #0D0B12;box-shadow:4px 4px 4px rgba(0,0,0,0.2);display:flex;align-items:center;justify-content:center;"><span style="font-family:Fira Code;font-size:14px;color:#555;">Image unavailable</span></div>`,
+                    );
+                  }}
                 />
               ) : (
                 <div
