@@ -46,11 +46,10 @@ Search is implemented in `src/search.rs` using tantivy's BM25 scoring.
 
 **Query structure** (nested boolean):
 1. **Must group** — at least one text/fuzzy clause must match (provides relevance floor):
-   - **Short queries** (1-2 words): OR across all fields permissive — the QueryParser with default occurrence catches any matching term
-   - **Long queries** (3+ words): AND filter — every word must appear in at least one of the edge-ngram indexed fields (`title_ngram`, `ingredients_ngram`). The `prefix_only(2, 20)` tokenizer generates prefix n-grams, so "sou" (n-grams: `so`, `sou`) matches "soup" (n-grams: `so`, `sou`, `sou`, `soup`), and "chick" matches "chicken" — without needing separate fuzzy or prefix queries.
+   - **All queries**: AND across the edge-ngram indexed fields (`title_ngram`, `ingredients_ngram`) — every n-gram of every query word must appear in at least one field. The `prefix_only(2, 20)` tokenizer generates prefix n-grams, so "sou" (n-grams: `so`, `sou`) matches "soup" (n-grams: `so`, `sou`, `sou`, `soup`), and "chick" matches "chicken" — without needing separate fuzzy or prefix queries.
 2. **Should** — score-only boosts that don't affect filtering:
    - Exact phrase query in title with slop 1 (boost 5.0) — heavily favors consecutive word matches, so "French Onion Soup" beats "French Onion Cabbage Soup"
-   - Publication boost for known sites (Bon Appétit, NYT Cooking, Epicurious, boost 0.3)
+   - Publication boost for known sites (Bon Appétit, NYT Cooking, Epicurious, boost 0.01)
 
 **Result fetching**: After the tantivy search returns matching URLs, full recipe data (ingredients/instructions as arrays) is fetched from PostgreSQL via `WHERE url IN (...)` to populate the response.
 

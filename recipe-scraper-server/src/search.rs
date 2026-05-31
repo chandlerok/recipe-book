@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
 use sqlx::PgPool;
 use tantivy::{
-    Index, IndexReader, ReloadPolicy,
-    collector::{TopDocs, Count},
+    Index, IndexReader, ReloadPolicy, Term,
+    collector::{Count, TopDocs},
+    doc,
     query::{BooleanQuery, BoostQuery, Occur, PhraseQuery, Query, QueryParser, TermQuery},
     schema::*,
     tokenizer::{LowerCaser, NgramTokenizer, TextAnalyzer},
-    doc, Term,
 };
 use tracing::info;
 
@@ -51,10 +51,7 @@ impl RecipeIndex {
             "url".to_string(),
             FieldType::Str(STRING | STORED),
         ));
-        let title = sb.add_field(FieldEntry::new_text(
-            "title".to_string(),
-            TEXT | STORED,
-        ));
+        let title = sb.add_field(FieldEntry::new_text("title".to_string(), TEXT | STORED));
         let title_ngram = sb.add_field(FieldEntry::new_text(
             "title_ngram".to_string(),
             TextOptions::default().set_indexing_options(
@@ -222,9 +219,7 @@ impl RecipeIndex {
         // query term to appear in at least one ngram field.
         let ngram_fields = vec![self.title_ngram, self.ingredients_ngram];
         let mut parser = QueryParser::for_index(&self.index, ngram_fields);
-        if words.len() >= 3 {
-            parser.set_conjunction_by_default();
-        }
+        parser.set_conjunction_by_default();
         if let Ok(parsed) = parser.parse_query(query_str) {
             outer.push((Occur::Must, Box::new(parsed)));
         }
@@ -238,14 +233,20 @@ impl RecipeIndex {
                 .map(|(i, w)| (i, Term::from_field_text(self.title, w)))
                 .collect();
             let phrase = PhraseQuery::new_with_offset_and_slop(phrase_terms, 1);
-            outer.push((Occur::Should, Box::new(BoostQuery::new(Box::new(phrase), 5.0))));
+            outer.push((
+                Occur::Should,
+                Box::new(BoostQuery::new(Box::new(phrase), 5.0)),
+            ));
         }
 
         // Publication boost
         for pub_name in &["Bon Appétit", "NYT Cooking", "Epicurious"] {
             let term = Term::from_field_text(self.publication, pub_name);
             let term_query = TermQuery::new(term, IndexRecordOption::Basic);
-            outer.push((Occur::Should, Box::new(BoostQuery::new(Box::new(term_query), 0.05))));
+            outer.push((
+                Occur::Should,
+                Box::new(BoostQuery::new(Box::new(term_query), 0.01)),
+            ));
         }
 
         let bool_query = BooleanQuery::new(outer);
