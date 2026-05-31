@@ -118,14 +118,15 @@ impl RecipeDb {
 
         sqlx::query!(
             r#"
-            INSERT INTO recipes (url, title, total_time, ingredients, instructions, image)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO recipes (url, title, total_time, ingredients, instructions, image, publication)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (url) DO UPDATE SET
                 title = EXCLUDED.title,
                 total_time = EXCLUDED.total_time,
                 ingredients = EXCLUDED.ingredients,
                 instructions = EXCLUDED.instructions,
                 image = EXCLUDED.image,
+                publication = EXCLUDED.publication,
                 scraped_at = CURRENT_TIMESTAMP
             "#,
             recipe.url,
@@ -134,6 +135,7 @@ impl RecipeDb {
             ingredients,
             instructions,
             recipe.image,
+            recipe.publication,
         )
         .execute(&self.pool)
         .await?;
@@ -153,14 +155,15 @@ impl RecipeDb {
 
         sqlx::query!(
             r#"
-            INSERT INTO recipes (url, title, total_time, ingredients, instructions, image)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO recipes (url, title, total_time, ingredients, instructions, image, publication)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (url) DO UPDATE SET
                 title = EXCLUDED.title,
                 total_time = EXCLUDED.total_time,
                 ingredients = EXCLUDED.ingredients,
                 instructions = EXCLUDED.instructions,
                 image = EXCLUDED.image,
+                publication = EXCLUDED.publication,
                 scraped_at = CURRENT_TIMESTAMP
             "#,
             recipe.url,
@@ -169,6 +172,7 @@ impl RecipeDb {
             ingredients,
             instructions,
             recipe.image,
+            recipe.publication,
         )
         .execute(&mut *tx)
         .await?;
@@ -187,7 +191,7 @@ impl RecipeDb {
     pub async fn get_recipe(&self, url: &str) -> Result<Option<Recipe>> {
         let row = sqlx::query!(
             r#"
-            SELECT url, title, total_time, ingredients, instructions, image
+            SELECT url, title, total_time, ingredients, instructions, image, publication
             FROM recipes WHERE url = $1
             "#,
             url
@@ -211,6 +215,7 @@ impl RecipeDb {
                 ingredients,
                 instructions,
                 image: r.image.unwrap_or_default(),
+                publication: r.publication.unwrap_or_default(),
             }
         }))
     }
@@ -254,7 +259,7 @@ impl RecipeDb {
                 UNION
                 SELECT url FROM recipes WHERE title % $1
             )
-            SELECT r.url, r.title, r.total_time, r.ingredients, r.instructions, r.image,
+            SELECT r.url, r.title, r.total_time, r.ingredients, r.instructions, r.image, r.publication,
                    COALESCE(ts_rank(r.search_vector, websearch_to_tsquery('english', $1)), 0)
                    + CASE WHEN r.title ILIKE $3 THEN 0.3 ELSE 0 END
                    + CASE WHEN r.ingredients ILIKE $3 THEN 0.1 ELSE 0 END
@@ -297,6 +302,7 @@ impl RecipeDb {
                         ingredients,
                         instructions,
                         image: r.image.unwrap_or_default(),
+                        publication: r.publication.unwrap_or_default(),
                     },
                     score: r.score.unwrap_or(0.0),
                 }
@@ -422,6 +428,7 @@ mod tests {
             ingredients: vec!["item1".to_string(), "item2".to_string()],
             instructions: vec!["step 1".to_string(), "step 2".to_string()],
             image: String::new(),
+            publication: "Test".to_string(),
         }
     }
 
