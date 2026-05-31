@@ -311,6 +311,7 @@ const App = () => {
         </div>
 
         <div
+          class="pagination"
           style={`display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 16px; flex-wrap: wrap;`}
         >
           <button
@@ -390,15 +391,35 @@ const App = () => {
         }
 
         .search-input:focus {
-          box-shadow: 0 0 0 3px rgba(200,103,185,0.25), 4px 4px 4px rgba(0,0,0,0.2);
+          box-shadow: 0 0 0 3px rgba(200,103,185,0.25), 0 0 40px 16px rgba(200,103,185,0.10), 4px 4px 4px rgba(0,0,0,0.2) !important;
         }
 
         .result-card {
+          position: relative;
           transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .result-card::before {
+          content: '';
+          position: absolute;
+          inset: -8px;
+          border-radius: 12px;
+          opacity: 0;
+          transition: opacity 0.15s ease;
+          pointer-events: none;
+          background: rgba(200,103,185,0.08);
+          filter: blur(12px);
+          z-index: -1;
         }
         .result-card:hover {
           transform: translateY(-1px);
-          box-shadow: 0 0 0 1px rgba(200,103,185,0.3), 0 8px 24px rgba(200,103,185,0.08), 4px 4px 4px rgba(0,0,0,0.2);
+          box-shadow: 0 0 0 1px rgba(200,103,185,0.35), 0 8px 24px rgba(200,103,185,0.12), 4px 4px 4px rgba(0,0,0,0.2) !important;
+        }
+        .result-card:hover::before {
+          opacity: 1;
+        }
+
+        .pagination button:not(:disabled):hover {
+          box-shadow: 0 0 0 1px rgba(200,103,185,0.35), 0 0 20px 8px rgba(200,103,185,0.08), 4px 4px 4px rgba(0,0,0,0.2) !important;
         }
 
         .result-card:nth-child(1) { animation: fade-in-up 0.25s ease both; }
