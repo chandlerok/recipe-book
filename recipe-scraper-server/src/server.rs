@@ -25,9 +25,7 @@ use url::Url;
 use crate::db::RecipeDb;
 use crate::models::{RecipeQuery, SearchParams};
 use crate::scraper::{self, ProxyPool};
-use crate::templates::{
-    HitView, IndexTemplate, RecipeDetailTemplate, SearchResultsTemplate,
-};
+use crate::templates::{HitView, IndexTemplate, RecipeDetailTemplate, SearchResultsTemplate};
 
 pub const SCRAPE_DELAY: Duration = Duration::from_secs(2);
 
@@ -72,7 +70,10 @@ pub struct SearchQuery {
     pub offset: Option<i32>,
 }
 
-async fn index_handler(State(state): State<AppState>, Query(params): Query<SearchQuery>) -> impl IntoResponse {
+async fn index_handler(
+    State(state): State<AppState>,
+    Query(params): Query<SearchQuery>,
+) -> impl IntoResponse {
     let query = params.q.unwrap_or_default().trim().to_string();
     let limit = params.limit.unwrap_or(20).clamp(1, 100);
     let offset = params.offset.unwrap_or(0).max(0);
@@ -101,15 +102,26 @@ async fn index_handler(State(state): State<AppState>, Query(params): Query<Searc
         Ok(html) => (StatusCode::OK, [("content-type", "text/html")], html),
         Err(e) => {
             warn!("template error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, [("content-type", "text/plain")], "Internal error".to_string())
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [("content-type", "text/plain")],
+                "Internal error".to_string(),
+            )
         }
     }
 }
 
-async fn search_handler(State(state): State<AppState>, Query(params): Query<SearchQuery>) -> impl IntoResponse {
+async fn search_handler(
+    State(state): State<AppState>,
+    Query(params): Query<SearchQuery>,
+) -> impl IntoResponse {
     let query = params.q.unwrap_or_default().trim().to_string();
     if query.is_empty() {
-        return (StatusCode::OK, [("content-type", "text/html")], String::new());
+        return (
+            StatusCode::OK,
+            [("content-type", "text/html")],
+            String::new(),
+        );
     }
 
     let limit = params.limit.unwrap_or(20).clamp(1, 100);
@@ -142,12 +154,19 @@ async fn search_handler(State(state): State<AppState>, Query(params): Query<Sear
         Ok(html) => (StatusCode::OK, [("content-type", "text/html")], html),
         Err(e) => {
             warn!("template error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, [("content-type", "text/plain")], "Internal error".to_string())
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [("content-type", "text/plain")],
+                "Internal error".to_string(),
+            )
         }
     }
 }
 
-async fn recipe_handler(State(state): State<AppState>, Query(params): Query<RecipeQuery>) -> impl IntoResponse {
+async fn recipe_handler(
+    State(state): State<AppState>,
+    Query(params): Query<RecipeQuery>,
+) -> impl IntoResponse {
     match state.db.get_recipe(&params.url).await {
         Ok(Some(recipe)) => {
             let tmpl = RecipeDetailTemplate { recipe };
@@ -155,24 +174,31 @@ async fn recipe_handler(State(state): State<AppState>, Query(params): Query<Reci
                 Ok(html) => (StatusCode::OK, [("content-type", "text/html")], html),
                 Err(e) => {
                     warn!("template error: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, [("content-type", "text/plain")], "Internal error".to_string())
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        [("content-type", "text/plain")],
+                        "Internal error".to_string(),
+                    )
                 }
             }
         }
-        Ok(None) => (StatusCode::NOT_FOUND, [("content-type", "text/plain")], "Recipe not found".to_string()),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            [("content-type", "text/plain")],
+            "Recipe not found".to_string(),
+        ),
         Err(e) => {
             warn!("get recipe error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, [("content-type", "text/plain")], e.to_string())
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [("content-type", "text/plain")],
+                e.to_string(),
+            )
         }
     }
 }
 
-pub async fn serve(
-    host: String,
-    port: u16,
-    dsn: String,
-    workers: usize,
-) -> Result<()> {
+pub async fn serve(host: String, port: u16, dsn: String, workers: usize) -> Result<()> {
     let db = RecipeDb::new(&dsn).await?;
     let shutdown = Arc::new(AtomicBool::new(false));
 

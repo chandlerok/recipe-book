@@ -1,6 +1,6 @@
 <div class="modal-header">
-  <h2 class="modal-title">{{ recipe.title }}</h2>
-  <button class="modal-close">&times;</button>
+	<h2 class="modal-title">{{ recipe.title }}</h2>
+	<button class="modal-close">&times;</button>
 </div>
 
 {% if !recipe.image.is_empty() %}
@@ -15,16 +15,16 @@
 
 <h3 class="modal-section-heading">Ingredients</h3>
 <ul class="modal-list">
-{% for ing in recipe.ingredients %}
-  <li>{{ ing }}</li>
-{% endfor %}
+	{% for ing in recipe.ingredients %}
+	<li>{{ ing }}</li>
+	{% endfor %}
 </ul>
 
 <h3 class="modal-section-heading">Instructions</h3>
 <ol class="modal-list">
-{% for step in recipe.instructions %}
-  <li>{{ step }}</li>
-{% endfor %}
+	{% for step in recipe.instructions %}
+	<li>{{ step }}</li>
+	{% endfor %}
 </ol>
 
 <a href="{{ recipe.url }}" target="_blank" rel="noopener noreferrer" class="modal-link">View original recipe &#8599;</a>

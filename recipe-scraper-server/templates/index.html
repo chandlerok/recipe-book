@@ -2,38 +2,25 @@
 
 {% block content %}
 <div class="container">
-  <div id="spacer" class="spacer{% if query.is_empty() %} spacer--visible{% endif %}"></div>
-  <h1 class="title">Recipe Search</h1>
-  <input
-    type="text"
-    class="search-input"
-    placeholder="Search recipes..."
-    name="q"
-    value="{{ query }}"
-    autofocus
-    hx-get="/search"
-    hx-trigger="keyup changed delay:300ms"
-    hx-target="#results"
-    hx-params="q"
-    hx-push-url="true"
-    _="on htmx:beforeRequest
+	<div id="spacer" class="spacer{% if query.is_empty() %} spacer--visible{% endif %}"></div>
+	<h1 class="title">Recipe Search</h1>
+	<input type="text" class="search-input" placeholder="Search recipes..." name="q" value="{{ query }}" autofocus hx-get="/search" hx-trigger="keyup changed delay:300ms" hx-target="#results" hx-params="q" hx-push-url="true" _="on htmx:beforeRequest
        if #results.children.length > 0 then remove .spacer--visible from #spacer">
 
-  <div id="results">
-    {% if !results.is_empty() %}
-      {% include "search_results.html" %}
-    {% else if !query.is_empty() %}
-      {% include "empty_state.html" %}
-    {% endif %}
-  </div>
+	<div id="results">
+		{% if !results.is_empty() %}
+		{% include "search_results.html" %}
+		{% else if !query.is_empty() %}
+		{% include "empty_state.html" %}
+		{% endif %}
+	</div>
 
-  <div id="modal" class="modal-overlay"
-       _="on click
+	<div id="modal" class="modal-overlay" _="on click
           if target matches .modal-overlay or target matches .modal-close
             remove .modal--open from me
             wait 200ms
             set #modal-content.innerHTML to ''">
-    <div id="modal-content" class="modal-content"></div>
-  </div>
+		<div id="modal-content" class="modal-content"></div>
+	</div>
 </div>
 {% endblock %}

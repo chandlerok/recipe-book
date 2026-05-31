@@ -24,7 +24,6 @@ struct Cli {
 
     #[arg(long, env = "WORKERS", default_value = "5")]
     workers: usize,
-
 }
 
 #[tokio::main]
