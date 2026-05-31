@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-#MISE description="Build the SolidJS frontend for production"
-#MISE dir="recipe-scraper-web"
-bun run build

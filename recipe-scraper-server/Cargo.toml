@@ -29,6 +29,7 @@ anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
 url = "2"
 rand = "0.8"
+askama = { version = "0.13", features = ["serde_json"] }
 
 [dev-dependencies]
 wiremock = "0.6"
