@@ -1,0 +1,67 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH matched AS (\n                SELECT url FROM recipes\n                WHERE search_vector @@ websearch_to_tsquery('english', $1)\n                UNION\n                SELECT url FROM recipes WHERE title ILIKE $3\n                UNION\n                SELECT url FROM recipes WHERE ingredients ILIKE $3\n                UNION\n                SELECT url FROM recipes WHERE title % $1\n            )\n            SELECT r.url, r.title, r.total_time, r.ingredients, r.instructions, r.image,\n                   COALESCE(ts_rank(r.search_vector, websearch_to_tsquery('english', $1)), 0)\n                   + CASE WHEN r.title ILIKE $3 THEN 0.3 ELSE 0 END\n                   + CASE WHEN r.ingredients ILIKE $3 THEN 0.1 ELSE 0 END\n                   + GREATEST(word_similarity($1, COALESCE(r.title, '')), 0) * 0.4\n                   + GREATEST(word_similarity($1, COALESCE(r.ingredients, '')), 0) * 0.15 AS score,\n                   COUNT(*) OVER() AS total\n            FROM recipes r\n            JOIN matched m ON r.url = m.url\n            ORDER BY score DESC\n            LIMIT $2 OFFSET $4\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "total_time",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "ingredients",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "instructions",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "image",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "score",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
+        "name": "total",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "b51649e2a868e0f1093862322f448bc20e33b2a686e52ea97956695ffd348ed2"
+}

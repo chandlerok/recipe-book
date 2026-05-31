@@ -3,7 +3,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use sqlx::Row;
 use sqlx::postgres::PgPoolOptions;
 use tokio::sync::RwLock;
 use tracing::info;
@@ -158,8 +157,7 @@ impl RecipeDb {
 
     pub async fn enqueue_url(&self, url: &str) -> Result<String> {
         let existing: Option<String> =
-            sqlx::query_scalar("SELECT status FROM scrape_queue WHERE url = $1")
-                .bind(url)
+            sqlx::query_scalar!("SELECT status FROM scrape_queue WHERE url = $1", url)
                 .fetch_optional(&self.pool)
                 .await?;
 
@@ -167,8 +165,7 @@ impl RecipeDb {
             return Ok(status);
         }
 
-        sqlx::query("INSERT INTO scrape_queue (url) VALUES ($1)")
-            .bind(url)
+        sqlx::query!("INSERT INTO scrape_queue (url) VALUES ($1)", url)
             .execute(&self.pool)
             .await?;
 
@@ -176,7 +173,7 @@ impl RecipeDb {
     }
 
     pub async fn next_pending(&self) -> Result<Option<(i32, String)>> {
-        let row = sqlx::query(
+        let row = sqlx::query!(
             r#"
             UPDATE scrape_queue SET status = 'in_progress'
             WHERE id = (
@@ -192,15 +189,15 @@ impl RecipeDb {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(row.map(|r| (r.get("id"), r.get("url"))))
+        Ok(row.map(|r| (r.id, r.url)))
     }
 
     #[allow(dead_code)]
     pub async fn mark_done(&self, job_id: i32) -> Result<()> {
-        sqlx::query(
+        sqlx::query!(
             "UPDATE scrape_queue SET status = 'done', scraped_at = CURRENT_TIMESTAMP WHERE id = $1",
+            job_id
         )
-        .bind(job_id)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -208,11 +205,13 @@ impl RecipeDb {
 
     pub async fn mark_error(&self, job_id: i32, error: &str) -> Result<()> {
         let error = &error[..error.len().min(500)];
-        sqlx::query("UPDATE scrape_queue SET status = 'error', error_message = $1 WHERE id = $2")
-            .bind(error)
-            .bind(job_id)
-            .execute(&self.pool)
-            .await?;
+        sqlx::query!(
+            "UPDATE scrape_queue SET status = 'error', error_message = $1 WHERE id = $2",
+            error,
+            job_id
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
@@ -221,7 +220,7 @@ impl RecipeDb {
         let ingredients = serde_json::to_string(&recipe.ingredients)?;
         let instructions = serde_json::to_string(&recipe.instructions)?;
 
-        sqlx::query(
+        sqlx::query!(
             r#"
             INSERT INTO recipes (url, title, total_time, ingredients, instructions, image)
             VALUES ($1, $2, $3, $4, $5, $6)
@@ -233,13 +232,13 @@ impl RecipeDb {
                 image = EXCLUDED.image,
                 scraped_at = CURRENT_TIMESTAMP
             "#,
+            recipe.url,
+            recipe.title,
+            recipe.total_time,
+            ingredients,
+            instructions,
+            recipe.image,
         )
-        .bind(&recipe.url)
-        .bind(&recipe.title)
-        .bind(recipe.total_time)
-        .bind(&ingredients)
-        .bind(&instructions)
-        .bind(&recipe.image)
         .execute(&self.pool)
         .await?;
 
@@ -256,7 +255,7 @@ impl RecipeDb {
 
         let mut tx = self.pool.begin().await?;
 
-        sqlx::query(
+        sqlx::query!(
             r#"
             INSERT INTO recipes (url, title, total_time, ingredients, instructions, image)
             VALUES ($1, $2, $3, $4, $5, $6)
@@ -268,20 +267,20 @@ impl RecipeDb {
                 image = EXCLUDED.image,
                 scraped_at = CURRENT_TIMESTAMP
             "#,
+            recipe.url,
+            recipe.title,
+            recipe.total_time,
+            ingredients,
+            instructions,
+            recipe.image,
         )
-        .bind(&recipe.url)
-        .bind(&recipe.title)
-        .bind(recipe.total_time)
-        .bind(&ingredients)
-        .bind(&instructions)
-        .bind(&recipe.image)
         .execute(&mut *tx)
         .await?;
 
-        sqlx::query(
+        sqlx::query!(
             "UPDATE scrape_queue SET status = 'done', scraped_at = CURRENT_TIMESTAMP WHERE id = $1",
+            job_id
         )
-        .bind(job_id)
         .execute(&mut *tx)
         .await?;
 
@@ -290,19 +289,19 @@ impl RecipeDb {
     }
 
     pub async fn get_recipe(&self, url: &str) -> Result<Option<Recipe>> {
-        let row = sqlx::query(
+        let row = sqlx::query!(
             r#"
             SELECT url, title, total_time, ingredients, instructions, image
             FROM recipes WHERE url = $1
             "#,
+            url
         )
-        .bind(url)
         .fetch_optional(&self.pool)
         .await?;
 
         Ok(row.map(|r| {
-            let ingredients_str: String = r.get("ingredients");
-            let instructions_str: String = r.get("instructions");
+            let ingredients_str = r.ingredients.unwrap_or_default();
+            let instructions_str = r.instructions.unwrap_or_default();
 
             let ingredients: Vec<String> =
                 serde_json::from_str(&ingredients_str).unwrap_or_default();
@@ -310,12 +309,12 @@ impl RecipeDb {
                 serde_json::from_str(&instructions_str).unwrap_or_default();
 
             Recipe {
-                url: r.get("url"),
-                title: r.get("title"),
-                total_time: r.get("total_time"),
+                url: r.url,
+                title: r.title.unwrap_or_default(),
+                total_time: r.total_time.unwrap_or(0),
                 ingredients,
                 instructions,
-                image: r.get("image"),
+                image: r.image.unwrap_or_default(),
             }
         }))
     }
@@ -347,7 +346,7 @@ impl RecipeDb {
             .execute(&mut *tx)
             .await?;
 
-        let rows = sqlx::query(
+        let rows = sqlx::query!(
             r#"
             WITH matched AS (
                 SELECT url FROM recipes
@@ -371,40 +370,39 @@ impl RecipeDb {
             ORDER BY score DESC
             LIMIT $2 OFFSET $4
             "#,
+            query,
+            i64::from(limit),
+            pattern,
+            i64::from(offset),
         )
-        .bind(query)
-        .bind(limit)
-        .bind(&pattern)
-        .bind(offset)
         .fetch_all(&mut *tx)
         .await?;
 
         tx.commit().await?;
 
-        let total: i64 = rows.first().map(|r| r.get("total")).unwrap_or(0);
+        let total: i64 = rows.first().and_then(|r| r.total).unwrap_or(0);
 
         let hits: Vec<SearchHit> = rows
             .into_iter()
             .map(|r| {
-                let ingredients_str: String = r.get("ingredients");
-                let instructions_str: String = r.get("instructions");
-                let score: f64 = r.get("score");
+                let ingredients_str = r.ingredients.unwrap_or_default();
+                let instructions_str = r.instructions.unwrap_or_default();
 
                 let ingredients: Vec<String> =
                     serde_json::from_str(&ingredients_str).unwrap_or_default();
                 let instructions: Vec<String> =
                     serde_json::from_str(&instructions_str).unwrap_or_default();
 
-                SearchHit {
+                    SearchHit {
                     recipe: Recipe {
-                        url: r.get("url"),
-                        title: r.get("title"),
-                        total_time: r.get("total_time"),
+                        url: r.url,
+                        title: r.title.unwrap_or_default(),
+                        total_time: r.total_time.unwrap_or(0),
                         ingredients,
                         instructions,
-                        image: r.get("image"),
+                        image: r.image.unwrap_or_default(),
                     },
-                    score,
+                    score: r.score.unwrap_or(0.0),
                 }
             })
             .collect();
@@ -432,10 +430,9 @@ impl RecipeDb {
     }
 
     pub async fn queue_stats(&self) -> Result<QueueStats> {
-        let rows =
-            sqlx::query("SELECT status, COUNT(*) as count FROM scrape_queue GROUP BY status")
-                .fetch_all(&self.pool)
-                .await?;
+        let rows = sqlx::query!("SELECT status, COUNT(*) as count FROM scrape_queue GROUP BY status")
+            .fetch_all(&self.pool)
+            .await?;
 
         let mut stats = QueueStats {
             pending: 0,
@@ -445,13 +442,11 @@ impl RecipeDb {
         };
 
         for row in rows {
-            let status: String = row.get("status");
-            let count: i64 = row.get("count");
-            match status.as_str() {
-                "pending" => stats.pending = count,
-                "in_progress" => stats.in_progress = count,
-                "done" => stats.done = count,
-                "error" => stats.error = count,
+            match row.status.as_str() {
+                "pending" => stats.pending = row.count.unwrap_or(0),
+                "in_progress" => stats.in_progress = row.count.unwrap_or(0),
+                "done" => stats.done = row.count.unwrap_or(0),
+                "error" => stats.error = row.count.unwrap_or(0),
                 _ => {}
             }
         }
@@ -460,17 +455,16 @@ impl RecipeDb {
     }
 
     pub async fn try_acquire_crawl_lock(&self) -> Result<bool> {
-        let row: (bool,) = sqlx::query_as("SELECT pg_try_advisory_lock($1)")
-            .bind(CRAWL_LOCK_ID)
-            .fetch_one(&self.pool)
-            .await?;
-        Ok(row.0)
+        let locked: Option<bool> =
+            sqlx::query_scalar!("SELECT pg_try_advisory_lock($1)", CRAWL_LOCK_ID)
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(locked.unwrap_or(false))
     }
 
     pub async fn release_crawl_lock(&self) -> Result<()> {
-        sqlx::query("SELECT pg_advisory_unlock($1)")
-            .bind(CRAWL_LOCK_ID)
-            .execute(&self.pool)
+        sqlx::query!("SELECT pg_advisory_unlock($1)", CRAWL_LOCK_ID)
+            .fetch_optional(&self.pool)
             .await?;
         Ok(())
     }
@@ -574,13 +568,11 @@ mod tests {
         assert!(job.is_some());
         let (id, _) = job.unwrap();
 
-        let row = sqlx::query("SELECT status FROM scrape_queue WHERE id = $1")
-            .bind(id)
+        let row = sqlx::query!("SELECT status FROM scrape_queue WHERE id = $1", id)
             .fetch_one(&db.pool)
             .await
             .unwrap();
-        let status: String = row.get("status");
-        assert_eq!(status, "in_progress");
+        assert_eq!(row.status, "in_progress");
     }
 
     #[tokio::test]
@@ -601,13 +593,11 @@ mod tests {
         let (id, _) = job.unwrap();
         db.mark_done(id).await.unwrap();
 
-        let row = sqlx::query("SELECT status FROM scrape_queue WHERE id = $1")
-            .bind(id)
+        let row = sqlx::query!("SELECT status FROM scrape_queue WHERE id = $1", id)
             .fetch_one(&db.pool)
             .await
             .unwrap();
-        let status: String = row.get("status");
-        assert_eq!(status, "done");
+        assert_eq!(row.status, "done");
     }
 
     #[tokio::test]
@@ -620,15 +610,15 @@ mod tests {
         let (id, _) = job.unwrap();
         db.mark_error(id, "something broke").await.unwrap();
 
-        let row = sqlx::query("SELECT status, error_message FROM scrape_queue WHERE id = $1")
-            .bind(id)
-            .fetch_one(&db.pool)
-            .await
-            .unwrap();
-        let status: String = row.get("status");
-        let message: String = row.get("error_message");
-        assert_eq!(status, "error");
-        assert_eq!(message, "something broke");
+        let row = sqlx::query!(
+            "SELECT status, error_message FROM scrape_queue WHERE id = $1",
+            id
+        )
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(row.status, "error");
+        assert_eq!(row.error_message, Some("something broke".to_string()));
     }
 
     #[tokio::test]
@@ -641,13 +631,11 @@ mod tests {
         let (id, _) = job.unwrap();
         db.mark_error(id, &"x".repeat(1000)).await.unwrap();
 
-        let row = sqlx::query("SELECT error_message FROM scrape_queue WHERE id = $1")
-            .bind(id)
+        let row = sqlx::query!("SELECT error_message FROM scrape_queue WHERE id = $1", id)
             .fetch_one(&db.pool)
             .await
             .unwrap();
-        let message: String = row.get("error_message");
-        assert_eq!(message.len(), 500);
+        assert_eq!(row.error_message.unwrap().len(), 500);
     }
 
     #[tokio::test]

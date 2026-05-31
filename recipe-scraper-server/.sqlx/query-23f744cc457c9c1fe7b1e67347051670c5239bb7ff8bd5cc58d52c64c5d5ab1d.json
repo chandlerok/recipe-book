@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE scrape_queue SET status = 'in_progress'\n            WHERE id = (\n                SELECT id FROM scrape_queue\n                WHERE status = 'pending'\n                ORDER BY added_at ASC\n                LIMIT 1\n                FOR UPDATE SKIP LOCKED\n            )\n            RETURNING id, url\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "url",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "23f744cc457c9c1fe7b1e67347051670c5239bb7ff8bd5cc58d52c64c5d5ab1d"
+}

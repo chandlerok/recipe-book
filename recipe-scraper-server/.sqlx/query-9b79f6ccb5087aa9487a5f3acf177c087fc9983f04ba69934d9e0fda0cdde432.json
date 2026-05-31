@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE scrape_queue SET status = 'error', error_message = $1 WHERE id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9b79f6ccb5087aa9487a5f3acf177c087fc9983f04ba69934d9e0fda0cdde432"
+}
