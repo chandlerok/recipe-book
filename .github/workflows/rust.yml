@@ -33,6 +33,6 @@ jobs:
       run: mise build-server
     - name: Run tests
       env:
-        TEST_ADMIN_DSN: postgresql://postgres:postgres@postgres:5432/postgres
-        TEST_DSN: postgresql://postgres:postgres@postgres:5432/recipe_book_test
+        TEST_ADMIN_DSN: postgresql://postgres:postgres@localhost:5432/postgres
+        TEST_DSN: postgresql://postgres:postgres@localhost:5432/recipe_book_test
       run: mise test-server -- --verbose
