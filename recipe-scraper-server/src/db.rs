@@ -302,8 +302,13 @@ mod tests {
 
     use super::*;
 
-    const ADMIN_DSN: &str = "postgresql:///postgres";
-    const TEST_DSN: &str = "postgresql:///recipe_book_test";
+    fn admin_dsn() -> String {
+        std::env::var("TEST_ADMIN_DSN").unwrap_or_else(|_| "postgresql:///postgres".to_string())
+    }
+
+    fn test_dsn() -> String {
+        std::env::var("TEST_DSN").unwrap_or_else(|_| "postgresql:///recipe_book_test".to_string())
+    }
 
     static DB_MUTEX: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
     static DB_CREATED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -316,7 +321,7 @@ mod tests {
         if !DB_CREATED.load(std::sync::atomic::Ordering::Acquire) {
             let pool = PgPoolOptions::new()
                 .max_connections(2)
-                .connect(ADMIN_DSN)
+                .connect(&admin_dsn())
                 .await
                 .unwrap();
             sqlx::query!("DROP DATABASE IF EXISTS recipe_book_test WITH (FORCE)")
@@ -331,7 +336,7 @@ mod tests {
             DB_CREATED.store(true, std::sync::atomic::Ordering::Release);
         }
 
-        let db = RecipeDb::new(TEST_DSN).await.unwrap();
+        let db = RecipeDb::new(&test_dsn()).await.unwrap();
         sqlx::query!("DELETE FROM scrape_queue")
             .execute(&db.pool)
             .await

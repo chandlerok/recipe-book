@@ -15,10 +15,24 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
     - uses: actions/checkout@v6
     - uses: jdx/mise-action@v4
     - name: Build
       run: mise build-server
     - name: Run tests
+      env:
+        TEST_ADMIN_DSN: postgresql://postgres:postgres@postgres:5432/postgres
+        TEST_DSN: postgresql://postgres:postgres@postgres:5432/recipe_book_test
       run: mise test-server -- --verbose
