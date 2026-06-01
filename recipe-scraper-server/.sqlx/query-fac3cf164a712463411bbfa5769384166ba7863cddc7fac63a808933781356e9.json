@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO recipes (url, title, total_time, ingredients, instructions, image, publication, description, json_ld)\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n            ON CONFLICT (url) DO UPDATE SET\n                title = EXCLUDED.title,\n                total_time = EXCLUDED.total_time,\n                ingredients = EXCLUDED.ingredients,\n                instructions = EXCLUDED.instructions,\n                image = EXCLUDED.image,\n                publication = EXCLUDED.publication,\n                description = EXCLUDED.description,\n                json_ld = EXCLUDED.json_ld,\n                scraped_at = CURRENT_TIMESTAMP\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Text",
+        "Int4",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fac3cf164a712463411bbfa5769384166ba7863cddc7fac63a808933781356e9"
+}
