@@ -83,6 +83,8 @@ pub struct ScrapedRecipe {
     pub instructions: Vec<String>,
     pub image: String,
     pub publication: String,
+    pub description: String,
+    pub json_ld: String,
 }
 
 pub fn extract_publication(url: &str) -> String {
@@ -277,6 +279,16 @@ pub fn parse_recipe(html: &str, url: &str) -> Result<ScrapedRecipe> {
         .map(String::from)
         .unwrap_or_default();
 
+    let json_ld_selector =
+        scraper::Selector::parse(r#"script[type="application/ld+json"]"#).unwrap();
+    let json_ld = doc
+        .select(&json_ld_selector)
+        .next()
+        .map(|el| el.text().collect::<String>())
+        .unwrap_or_default();
+
+    let description = recipe.description().to_string();
+
     info!("scraped recipe: url={url} title={title}");
 
     Ok(ScrapedRecipe {
@@ -287,6 +299,8 @@ pub fn parse_recipe(html: &str, url: &str) -> Result<ScrapedRecipe> {
         instructions,
         image,
         publication: extract_publication(url),
+        description,
+        json_ld,
     })
 }
 

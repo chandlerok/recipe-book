@@ -65,6 +65,15 @@ async fn main() -> Result<()> {
                 Box::pin(async move {
                     tracing::info!("starting daily crawl");
                     crawler::crawl_all_sites(&db, &client, proxy_pool).await;
+
+                    let backfilled = db.enqueue_backfill(100).await.unwrap_or(0);
+                    if backfilled > 0 {
+                        tracing::info!(
+                            "backfill enqueued {} recipes missing descriptions",
+                            backfilled
+                        );
+                    }
+
                     tracing::info!("daily crawl complete");
                 })
             }

@@ -10,6 +10,7 @@ pub struct Recipe {
     pub instructions: Vec<String>,
     pub image: String,
     pub publication: String,
+    pub description: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

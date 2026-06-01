@@ -107,8 +107,8 @@ impl RecipeDb {
 
         sqlx::query!(
             r#"
-            INSERT INTO recipes (url, title, total_time, ingredients, instructions, image, publication)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO recipes (url, title, total_time, ingredients, instructions, image, publication, description, json_ld)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             ON CONFLICT (url) DO UPDATE SET
                 title = EXCLUDED.title,
                 total_time = EXCLUDED.total_time,
@@ -116,6 +116,8 @@ impl RecipeDb {
                 instructions = EXCLUDED.instructions,
                 image = EXCLUDED.image,
                 publication = EXCLUDED.publication,
+                description = EXCLUDED.description,
+                json_ld = EXCLUDED.json_ld,
                 scraped_at = CURRENT_TIMESTAMP
             "#,
             recipe.url,
@@ -125,6 +127,8 @@ impl RecipeDb {
             instructions,
             recipe.image,
             recipe.publication,
+            recipe.description,
+            recipe.json_ld,
         )
         .execute(&self.pool)
         .await?;
@@ -144,8 +148,8 @@ impl RecipeDb {
 
         sqlx::query!(
             r#"
-            INSERT INTO recipes (url, title, total_time, ingredients, instructions, image, publication)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO recipes (url, title, total_time, ingredients, instructions, image, publication, description, json_ld)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             ON CONFLICT (url) DO UPDATE SET
                 title = EXCLUDED.title,
                 total_time = EXCLUDED.total_time,
@@ -153,6 +157,8 @@ impl RecipeDb {
                 instructions = EXCLUDED.instructions,
                 image = EXCLUDED.image,
                 publication = EXCLUDED.publication,
+                description = EXCLUDED.description,
+                json_ld = EXCLUDED.json_ld,
                 scraped_at = CURRENT_TIMESTAMP
             "#,
             recipe.url,
@@ -162,6 +168,8 @@ impl RecipeDb {
             instructions,
             recipe.image,
             recipe.publication,
+            recipe.description,
+            recipe.json_ld,
         )
         .execute(&mut *tx)
         .await?;
@@ -180,7 +188,7 @@ impl RecipeDb {
     pub async fn get_recipe(&self, url: &str) -> Result<Option<Recipe>> {
         let row = sqlx::query!(
             r#"
-            SELECT url, title, total_time, ingredients, instructions, image, publication
+            SELECT url, title, total_time, ingredients, instructions, image, publication, description
             FROM recipes WHERE url = $1
             "#,
             url
@@ -205,6 +213,7 @@ impl RecipeDb {
                 instructions,
                 image: r.image.unwrap_or_default(),
                 publication: r.publication.unwrap_or_default(),
+                description: r.description.unwrap_or_default(),
             }
         }))
     }
@@ -233,6 +242,42 @@ impl RecipeDb {
         }
 
         Ok(stats)
+    }
+
+    pub async fn enqueue_backfill(&self, limit: i64) -> Result<i64> {
+        let urls: Vec<String> = sqlx::query_scalar!(
+            r#"
+            SELECT url FROM recipes
+            WHERE description IS NULL
+            AND url NOT IN (SELECT url FROM scrape_queue WHERE status = 'pending')
+            ORDER BY scraped_at ASC
+            LIMIT $1
+            "#,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        if urls.is_empty() {
+            return Ok(0);
+        }
+
+        sqlx::query!(
+            "DELETE FROM scrape_queue WHERE url = ANY($1) AND status IN ('done', 'error')",
+            &urls
+        )
+        .execute(&self.pool)
+        .await?;
+
+        let mut count = 0i64;
+        for url in &urls {
+            match self.enqueue_url(url).await {
+                Ok(status) if status == "pending" => count += 1,
+                _ => {}
+            }
+        }
+
+        Ok(count)
     }
 
     pub async fn try_acquire_crawl_lock(&self) -> Result<bool> {
@@ -307,6 +352,8 @@ mod tests {
             instructions: vec!["step 1".to_string(), "step 2".to_string()],
             image: String::new(),
             publication: "Test".to_string(),
+            description: "A test recipe".to_string(),
+            json_ld: String::new(),
         }
     }
 

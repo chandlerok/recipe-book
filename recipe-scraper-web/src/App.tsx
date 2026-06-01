@@ -16,6 +16,7 @@ interface Recipe {
   instructions: string[];
   image: string;
   publication: string;
+  description: string;
 }
 
 const LOGO_COLORS = [
@@ -298,14 +299,16 @@ const App = () => {
               >
                 <div
                   class="skeleton"
-                  style="width: 80px; height: 80px; border-radius: 4px; flex-shrink: 0;"
+                  style="width: 130px; height: 130px; border-radius: 4px; flex-shrink: 0;"
                 />
-                <div style="padding: 16px 0; flex: 1;">
-                  <div class="skeleton" style="width: 60%; height: 16px;" />
-                  <div style="margin-top: 16px; display: flex; align-items: center; gap: 8px;">
+                <div style="padding: 28px 0 0; flex: 1; display: flex; flex-direction: column; gap: 6px;">
+                  <div class="skeleton" style="width: 60%; height: 20px;" />
+                  <div class="skeleton" style="width: 90%; height: 14px;" />
+                  <div class="skeleton" style="width: 80%; height: 14px;" />
+                  <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
                     <div
                       class="skeleton"
-                      style="width: 100px; height: 20px; border-radius: 100px;"
+                      style="width: 100px; height: 22px; border-radius: 100px;"
                     />
                     <div class="skeleton" style="width: 40px; height: 14px;" />
                   </div>
@@ -335,16 +338,23 @@ const App = () => {
                   src={hit.recipe.image}
                   alt={hit.recipe.title}
                   loading="lazy"
-                  style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; flex-shrink: 0;"
+                  style="width: 130px; height: 130px; object-fit: cover; border-radius: 4px; flex-shrink: 0;"
                 />
               )}
-              <div style="padding: 16px 0; min-width: 0;">
+              <div style="padding: 28px 0 13px; min-width: 0; display: flex; flex-direction: column; gap: 6px; flex: 1;">
                 <span
                   style={`font-family: ${FONTS.title}; font-size: 16px; font-weight: 400; color: ${C().accentSecondary}; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;`}
                 >
                   {hit.recipe.title}
                 </span>
-                <div style="margin: 8px 0 0; display: flex; align-items: center; gap: 8px;">
+                <Show when={hit.recipe.description}>
+                  <span
+                    style={`font-family: ${FONTS.mono}; font-size: 12px; color: ${C().textMuted}; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; max-height: 50px;`}
+                  >
+                    {hit.recipe.description.slice(0, 120)}
+                  </span>
+                </Show>
+                <div style="display: flex; align-items: center; gap: 8px;">
                   <Show when={hit.recipe.publication}>
                     <span
                       style={`display: inline-flex; align-items: center; gap: 4px; background: ${C().pillBg}; border-radius: 100px; padding: 2px 8px; font-family: ${FONTS.mono}; font-size: 12px; color: ${C().textPlaceholder};`}
@@ -583,6 +593,14 @@ const App = () => {
                   </span>
                 </div>
               )}
+
+              <Show when={recipe.description}>
+                <p
+                  style={`font-family: ${FONTS.mono}; font-size: 13px; color: ${C().textMuted}; margin: 0 0 16px; line-height: 1.5;`}
+                >
+                  {recipe.description.slice(0, 300)}
+                </p>
+              </Show>
 
               <div style="display: flex; align-items: center; gap: 8px; margin: 0 0 24px;">
                 <Show when={recipe.publication}>
