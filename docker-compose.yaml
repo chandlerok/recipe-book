@@ -14,6 +14,15 @@ services:
       retries: 10
     restart: unless-stopped
 
+  flipt:
+    image: docker.flipt.io/flipt/flipt:v2
+    ports:
+      - "8080:8080"
+      - "9000:9000"
+    volumes:
+      - flipt_data:/var/opt/flipt
+    restart: unless-stopped
+
   app:
     build: .
     ports:
@@ -27,3 +36,4 @@ services:
 
 volumes:
   pgdata:
+  flipt_data:
