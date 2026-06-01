@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "CREATE DATABASE recipe_book_test",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "0eb047dfb042bf201301e2d9a5c38c93b4796e8f49f74a66d1934966b60aa542"
+}

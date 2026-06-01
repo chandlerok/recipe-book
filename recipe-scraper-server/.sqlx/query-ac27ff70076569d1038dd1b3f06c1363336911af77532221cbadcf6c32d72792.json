@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DROP DATABASE IF EXISTS recipe_book_test WITH (FORCE)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "ac27ff70076569d1038dd1b3f06c1363336911af77532221cbadcf6c32d72792"
+}

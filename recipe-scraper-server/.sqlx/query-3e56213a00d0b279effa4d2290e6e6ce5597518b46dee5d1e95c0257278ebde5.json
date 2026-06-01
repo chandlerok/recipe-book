@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM scrape_queue",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "3e56213a00d0b279effa4d2290e6e6ce5597518b46dee5d1e95c0257278ebde5"
+}
