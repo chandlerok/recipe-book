@@ -25,6 +25,8 @@ pub struct RecipeIndex {
     publication: Field,
     total_time: Field,
     image: Field,
+    description: Field,
+    description_ngram: Field,
     index: Index,
     reader: IndexReader,
     pool: PgPool,
@@ -110,6 +112,11 @@ impl RecipeIndex {
             "image".to_string(),
             FieldType::Str(STRING | STORED),
         ));
+        let description = sb.add_field(FieldEntry::new_text(
+            "description".to_string(),
+            TEXT | STORED,
+        ));
+        let description_ngram = sb.add_field(ngram_field("description_ngram"));
         let schema = sb.build();
 
         let index = Index::create_in_ram(schema.clone());
@@ -123,11 +130,12 @@ impl RecipeIndex {
             publication: Option<String>,
             total_time: Option<i32>,
             image: Option<String>,
+            description: Option<String>,
         }
 
         let rows: Vec<RecipeRow> = sqlx::query_as(
             r#"
-            SELECT url, title, ingredients, instructions, publication, total_time, image
+            SELECT url, title, ingredients, instructions, publication, total_time, image, description
             FROM recipes
             "#,
         )
@@ -143,6 +151,7 @@ impl RecipeIndex {
             let pub_str = row.publication.as_deref().unwrap_or("");
             let time_val = row.total_time.unwrap_or(0) as i64;
             let image_str = row.image.as_deref().unwrap_or("");
+            let description_str = row.description.as_deref().unwrap_or("");
 
             let ing_text: Vec<String> = serde_json::from_str(ingredients_str).unwrap_or_default();
             let instr_text: Vec<String> =
@@ -153,6 +162,7 @@ impl RecipeIndex {
 
             let title_ngrams = word_ngrams(title_str);
             let ing_ngrams = word_ngrams(&ing_joined);
+            let desc_ngrams = word_ngrams(description_str);
 
             writer.add_document(doc!(
                 url => row.url.as_str(),
@@ -164,6 +174,8 @@ impl RecipeIndex {
                 publication => pub_str,
                 total_time => time_val,
                 image => image_str,
+                description => description_str,
+                description_ngram => desc_ngrams.as_str(),
             ))?;
         }
         writer.commit()?;
@@ -186,6 +198,8 @@ impl RecipeIndex {
             publication,
             total_time,
             image,
+            description,
+            description_ngram,
             index,
             reader,
             pool,
@@ -201,6 +215,7 @@ impl RecipeIndex {
         let instr_joined = recipe.instructions.join(" ");
         let title_ngrams = word_ngrams(&recipe.title);
         let ing_ngrams = word_ngrams(&ing_joined);
+        let desc_ngrams = word_ngrams(&recipe.description);
 
         writer.add_document(doc!(
             self.url => recipe.url.as_str(),
@@ -212,6 +227,8 @@ impl RecipeIndex {
             self.publication => recipe.publication.as_str(),
             self.total_time => recipe.total_time as i64,
             self.image => recipe.image.as_str(),
+            self.description => recipe.description.as_str(),
+            self.description_ngram => desc_ngrams.as_str(),
         ))?;
 
         writer.commit()?;
@@ -248,7 +265,11 @@ impl RecipeIndex {
 
         for token in &ngram_tokens {
             let mut field_clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
-            for field in [self.title_ngram, self.ingredients_ngram] {
+            for field in [
+                self.title_ngram,
+                self.ingredients_ngram,
+                self.description_ngram,
+            ] {
                 let term = Term::from_field_text(field, token);
                 field_clauses.push((
                     Occur::Should,
@@ -334,7 +355,7 @@ impl RecipeIndex {
             .map(|(i, _)| format!("${}", i + 1))
             .collect();
         let sql = format!(
-            "SELECT url, title, total_time, ingredients, instructions, image, publication FROM recipes WHERE url IN ({})",
+            "SELECT url, title, total_time, ingredients, instructions, image, publication, description FROM recipes WHERE url IN ({})",
             params.join(", ")
         );
 
@@ -370,6 +391,7 @@ impl RecipeIndex {
                     instructions,
                     image: r.image.unwrap_or_default(),
                     publication: r.publication.unwrap_or_default(),
+                    description: r.description.unwrap_or_default(),
                 }
             })
             .collect())
@@ -385,6 +407,7 @@ struct RecipeDbRow {
     instructions: Option<String>,
     image: Option<String>,
     publication: Option<String>,
+    description: Option<String>,
 }
 
 #[cfg(test)]
